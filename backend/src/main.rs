@@ -103,6 +103,7 @@ async fn main() {
         .route("/events/{id}/odds", get(routes::events::get_event_odds));
 
     let app = Router::new()
+        .route("/health", get(routes::health::health))
         .nest("/api", protected)
         .nest("/api", public)
         .layer(Extension(pool))
