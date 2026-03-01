@@ -6,58 +6,71 @@
     question: 'Lakers defeat Celtics on Mar 5',
     creator_position: 'Lakers win',
     opponent_position: 'Celtics win',
-    amount_wei: 500000000000000000,
-    odds_numerator: 3,
-    odds_denominator: 2,
+    amount: 0.5,
+    odds: '3:2',
     status: 'active',
-    creator: { username: 'you', display_name: 'You' },
-    opponent: { username: 'chad_bets', display_name: 'Chad' },
-    created_at: '2026-03-01T10:00:00Z',
-    expires_at: '2026-03-04T10:00:00Z',
-    on_chain_bet_id: null,
-    assertion_id: null,
+    creator: { username: 'you', name: 'You', av: 1 },
+    opponent: { username: 'chad_bets', name: 'Chad', av: 2 },
+    created_at: '2026-03-01',
+    expires_at: '2026-03-04',
+    on_chain_id: null as string | null,
+    timeline: [
+      { label: 'Created', date: 'Mar 1, 2:15 PM', done: true },
+      { label: 'Accepted', date: 'Mar 1, 3:42 PM', done: true },
+      { label: 'Settling', date: '—', done: false },
+      { label: 'Settled', date: '—', done: false },
+    ],
   };
-
-  function formatWei(w: number) { return (w / 1e18).toFixed(3) + ' ETH'; }
 </script>
 
 <svelte:head><title>SideBet — Bet Detail</title></svelte:head>
 
-<div class="bet-detail" style="max-width:700px">
-  <a href="/bets" class="text-sm text-muted" style="margin-bottom:var(--space-lg);display:inline-block">← Back to My Bets</a>
+<div class="detail">
+  <a href="/bets" class="back-link animate-in">← Back to bets</a>
 
-  <div class="card-flat animate-slide-up" style="padding:var(--space-2xl)">
-    <div class="flex items-center justify-between" style="margin-bottom:var(--space-lg)">
-      <span class="badge badge-blue">{bet.status}</span>
-      <span class="text-xs text-muted">Created {new Date(bet.created_at).toLocaleDateString()}</span>
-    </div>
+  <div class="detail-card animate-in" style="animation-delay:60ms">
+    <h2>{bet.question}</h2>
 
-    <h2 style="margin-bottom:var(--space-lg)">{bet.question}</h2>
-
+    <!-- Matchup -->
     <div class="matchup">
       <div class="side">
-        <div class="avatar">{bet.creator.display_name[0]}</div>
+        <div class="av av-{bet.creator.av}">{bet.creator.name[0]}</div>
         <span class="side-name">@{bet.creator.username}</span>
-        <span class="side-position">{bet.creator_position}</span>
+        <span class="side-pos">{bet.creator_position}</span>
       </div>
-      <div class="vs-divider">VS</div>
+      <span class="vs-mark">VS</span>
       <div class="side">
-        <div class="avatar">{bet.opponent.display_name[0]}</div>
+        <div class="av av-{bet.opponent.av}">{bet.opponent.name[0]}</div>
         <span class="side-name">@{bet.opponent.username}</span>
-        <span class="side-position">{bet.opponent_position}</span>
+        <span class="side-pos">{bet.opponent_position}</span>
       </div>
     </div>
 
-    <div class="detail-grid">
-      <div class="detail-item"><span class="label">Wager</span><span class="val mono">{formatWei(bet.amount_wei)}</span></div>
-      <div class="detail-item"><span class="label">Odds</span><span class="val">{bet.odds_numerator}:{bet.odds_denominator}</span></div>
-      <div class="detail-item"><span class="label">Expires</span><span class="val">{new Date(bet.expires_at).toLocaleString()}</span></div>
-      <div class="detail-item"><span class="label">On-chain ID</span><span class="val mono">{bet.on_chain_bet_id || '—'}</span></div>
+    <!-- Details Row -->
+    <div class="detail-row">
+      <div class="d-item"><span class="d-label">Wager</span><span class="d-val mono">{bet.amount} ETH</span></div>
+      <div class="d-item"><span class="d-label">Odds</span><span class="d-val">{bet.odds}</span></div>
+      <div class="d-item"><span class="d-label">Expires</span><span class="d-val">{bet.expires_at}</span></div>
+      <div class="d-item"><span class="d-label">Chain ID</span><span class="d-val mono">{bet.on_chain_id || '—'}</span></div>
     </div>
 
+    <!-- Timeline -->
+    <div class="timeline">
+      {#each bet.timeline as step, i}
+        <div class="tl-step" class:done={step.done} class:last={i === bet.timeline.length - 1}>
+          <div class="tl-dot"></div>
+          <div class="tl-content">
+            <span class="tl-label">{step.label}</span>
+            <span class="tl-date">{step.date}</span>
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Actions -->
     {#if bet.status === 'proposed'}
       <div class="actions">
-        <button class="btn btn-success btn-lg" style="flex:1">Accept Bet</button>
+        <button class="btn btn-accept btn-lg" style="flex:1">Accept Bet</button>
         <button class="btn btn-danger btn-lg">Decline</button>
       </div>
     {:else if bet.status === 'active'}
@@ -69,15 +82,116 @@
 </div>
 
 <style>
-  .matchup { display:flex; align-items:center; justify-content:center; gap:var(--space-xl); margin-bottom:var(--space-2xl); }
-  .side { display:flex; flex-direction:column; align-items:center; gap:var(--space-sm); }
-  .side-name { font-weight:600; font-size:0.9375rem; }
-  .side-position { font-size:0.8125rem; color:var(--text-muted); }
-  .vs-divider { font-weight:800; color:var(--text-muted); font-size:0.75rem; letter-spacing:0.1em; }
-  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-md); margin-bottom:var(--space-xl); }
-  .detail-item { background:var(--bg-input); padding:var(--space-md); border-radius:var(--radius-md); }
-  .detail-item .label { display:block; font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-bottom:4px; }
-  .detail-item .val { font-weight:700; font-size:0.9375rem; }
-  .mono { font-family:var(--font-mono); color:var(--accent-blue); }
-  .actions { display:flex; gap:var(--space-md); }
+  .detail { max-width: 620px; }
+
+  .back-link {
+    display: inline-block;
+    font-size: 0.8125rem;
+    color: var(--text-3);
+    margin-bottom: 20px;
+    text-decoration: none;
+  }
+  .back-link:hover { color: var(--text-2); }
+
+  .detail-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 32px;
+  }
+
+  .detail-card h2 { margin-bottom: 28px; }
+
+  /* ── Matchup ── */
+  .matchup {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 28px;
+  }
+  .side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+  .side-name { font-weight: 600; font-size: 0.875rem; }
+  .side-pos { font-size: 0.75rem; color: var(--text-3); }
+  .vs-mark {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--text-3);
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Detail Row ── */
+  .detail-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .d-item {
+    padding: 12px;
+    background: var(--bg-raised);
+    border-radius: var(--r-md);
+  }
+  .d-label {
+    display: block;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    margin-bottom: 4px;
+    font-family: var(--font-display);
+  }
+  .d-val { font-weight: 700; font-size: 0.875rem; }
+
+  /* ── Timeline ── */
+  .timeline {
+    margin-bottom: 24px;
+    padding-left: 8px;
+  }
+  .tl-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding-bottom: 16px;
+    position: relative;
+  }
+  .tl-step:not(.last)::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 14px;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+  .tl-step.done:not(.last)::after { background: var(--lime); }
+  .tl-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  .tl-step.done .tl-dot { background: var(--lime); box-shadow: 0 0 6px var(--lime); }
+  .tl-content { flex: 1; }
+  .tl-label { font-size: 0.8125rem; font-weight: 600; display: block; }
+  .tl-date { font-size: 0.6875rem; color: var(--text-3); }
+
+  /* ── Actions ── */
+  .actions { display: flex; gap: 10px; }
+
+  @media (max-width: 600px) {
+    .detail-card { padding: 20px; }
+    .matchup { gap: 16px; }
+    .detail-row { grid-template-columns: 1fr; }
+  }
 </style>

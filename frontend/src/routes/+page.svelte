@@ -1,286 +1,275 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { isAuthenticated, user } from '$lib/stores';
 
   let feedItems = $state<any[]>([]);
   let pendingBets = $state<any[]>([]);
-  let loading = $state(true);
 
-  // Demo data for visual preview
   const demoFeed = [
-    { id: '1', item_type: 'bet_settled', payload: { question: 'Lakers defeat Celtics on Mar 5', creator_id: 'demo', amount_wei: 500000000000000000, outcome: 'creator_wins', status: 'settled' }, created_at: new Date().toISOString() },
-    { id: '2', item_type: 'bet_active', payload: { question: 'Will Bitcoin hit $150k by June 2026?', creator_id: 'demo', amount_wei: 1000000000000000000, status: 'active' }, created_at: new Date(Date.now() - 3600000).toISOString() },
-    { id: '3', item_type: 'bet_settled', payload: { question: 'Nuggets win Western Conference', creator_id: 'demo', amount_wei: 250000000000000000, outcome: 'opponent_wins', status: 'settled' }, created_at: new Date(Date.now() - 7200000).toISOString() },
+    { id: '1', type: 'settled', question: 'Lakers defeat Celtics on Mar 5', from: 'chad_bets', amount: 0.5, outcome: 'win', time: '12m ago' },
+    { id: '2', type: 'active', question: 'Will Bitcoin hit $150k by June 2026?', from: 'crypto_mike', amount: 1.0, outcome: null, time: '1h ago' },
+    { id: '3', type: 'settled', question: 'Nuggets win Western Conference', from: 'dub_nation', amount: 0.25, outcome: 'loss', time: '2h ago' },
+    { id: '4', type: 'settled', question: 'Fed raises rates in Q1', from: 'macro_trader', amount: 0.75, outcome: 'win', time: '5h ago' },
   ];
 
   const demoPending = [
-    { id: 'p1', question: 'Knicks beat 76ers tonight', creator_position: 'Knicks win', amount_wei: 100000000000000000, odds_numerator: 3, odds_denominator: 2, creator_id: 'friend1', expires_at: new Date(Date.now() + 86400000).toISOString() },
-    { id: 'p2', question: 'Trump wins 2028 GOP primary', creator_position: 'Yes', amount_wei: 500000000000000000, odds_numerator: 1, odds_denominator: 1, creator_id: 'friend2', expires_at: new Date(Date.now() + 172800000).toISOString() },
+    { id: 'p1', question: 'Knicks beat 76ers tonight', from: 'hoops_fan', amount: 0.1, odds: '3:2', expires: '23h left' },
+    { id: 'p2', question: 'Trump wins 2028 GOP primary', from: 'poly_whale', amount: 0.5, odds: '1:1', expires: '2d left' },
   ];
 
   onMount(() => {
     feedItems = demoFeed;
     pendingBets = demoPending;
-    loading = false;
   });
-
-  function formatWei(wei: number): string {
-    return (wei / 1e18).toFixed(3) + ' ETH';
-  }
-
-  function timeAgo(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-  }
-
-  function countdown(dateStr: string): string {
-    const diff = new Date(dateStr).getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const hours = Math.floor(diff / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
-    return `${hours}h ${mins}m left`;
-  }
 </script>
 
 <svelte:head>
   <title>SideBet — Dashboard</title>
-  <meta name="description" content="Your peer-to-peer betting dashboard. Track bets, view activity, and challenge friends." />
+  <meta name="description" content="Your peer-to-peer betting dashboard." />
 </svelte:head>
 
-<div class="dashboard">
-  <div class="page-header animate-slide-up">
-    <div>
-      <h1>Dashboard</h1>
-      <p class="text-secondary">Your betting activity at a glance</p>
+<div class="dash">
+  <!-- Hero -->
+  <section class="hero animate-in">
+    <div class="hero-glow"></div>
+    <h1 class="hero-title">You're <span class="lime">12–8</span> this month</h1>
+    <div class="hero-stats">
+      <span><strong class="mono">2.45 ETH</strong> wagered</span>
+      <span class="sep">·</span>
+      <span><strong class="mono">3</strong> active bets</span>
+      <span class="sep">·</span>
+      <span class="streak">3W streak</span>
     </div>
-    <a href="/bets/new" class="btn btn-primary">
-      ➕ New Bet
-    </a>
-  </div>
+  </section>
 
-  <!-- Stats Row -->
-  <div class="stats-row animate-slide-up" style="animation-delay: 80ms">
-    <div class="stat-card">
-      <div class="stat-value" style="color: var(--accent-green)">12</div>
-      <div class="stat-label">Wins</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: var(--accent-red)">8</div>
-      <div class="stat-label">Losses</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: var(--accent-gold)">3</div>
-      <div class="stat-label">Active</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" style="color: var(--accent-blue)">2.45 ETH</div>
-      <div class="stat-label">Total Wagered</div>
-    </div>
-  </div>
+  <!-- Incoming Bets -->
+  {#if pendingBets.length > 0}
+    <section class="section animate-in" style="animation-delay: 80ms">
+      <div class="section-head">
+        <h2>
+          <span class="dot dot--live"></span>
+          Incoming
+        </h2>
+        <span class="count">{pendingBets.length}</span>
+      </div>
 
-  <div class="dashboard-grid">
-    <!-- Incoming Bets -->
-    <section class="animate-slide-up" style="animation-delay: 160ms">
-      <h3 class="section-title">
-        <span class="status-dot live"></span>
-        Incoming Bets
-      </h3>
-
-      {#if pendingBets.length === 0}
-        <div class="empty-state">
-          <div class="icon">📭</div>
-          <p>No pending bets</p>
-        </div>
-      {:else}
-        <div class="bet-list stagger">
-          {#each pendingBets as bet}
-            <div class="card bet-card-incoming">
-              <div class="bet-card-top">
-                <span class="badge badge-gold">Pending</span>
-                <span class="text-xs text-muted">{countdown(bet.expires_at)}</span>
-              </div>
-              <p class="bet-question">{bet.question}</p>
-              <div class="bet-meta">
-                <span class="bet-amount">{formatWei(bet.amount_wei)}</span>
-                <span class="text-muted">·</span>
-                <span class="text-secondary">Odds {bet.odds_numerator}:{bet.odds_denominator}</span>
-              </div>
+      <div class="stagger">
+        {#each pendingBets as bet}
+          <a href="/bets/{bet.id}" class="bet-row accent-bar accent-bar--amber">
+            <div class="bet-row-body">
+              <span class="bet-q">{bet.question}</span>
+              <span class="bet-sub">from @{bet.from} · {bet.odds} · {bet.expires}</span>
+            </div>
+            <div class="bet-row-right">
+              <span class="mono amt">{bet.amount} ETH</span>
               <div class="bet-actions">
-                <button class="btn btn-success btn-sm">Accept</button>
-                <button class="btn btn-ghost btn-sm">Decline</button>
-                <a href="/bets/{bet.id}" class="btn btn-ghost btn-sm">Details →</a>
+                <button class="btn btn-accept btn-sm" onclick={(e) => e.stopPropagation()}>Accept</button>
+                <button class="btn btn-ghost btn-sm" onclick={(e) => e.stopPropagation()}>Decline</button>
               </div>
             </div>
-          {/each}
-        </div>
-      {/if}
+          </a>
+        {/each}
+      </div>
     </section>
+  {/if}
 
-    <!-- Activity Feed -->
-    <section class="animate-slide-up" style="animation-delay: 240ms">
-      <h3 class="section-title">Activity Feed</h3>
+  <!-- Feed -->
+  <section class="section animate-in" style="animation-delay: 160ms">
+    <div class="section-head">
+      <h2>Activity</h2>
+    </div>
 
-      {#if feedItems.length === 0}
-        <div class="empty-state">
-          <div class="icon">📋</div>
-          <p>No recent activity</p>
+    <div class="feed stagger">
+      {#each feedItems as item}
+        <div class="feed-row accent-bar"
+          class:accent-bar--lime={item.outcome === 'win'}
+          class:accent-bar--rose={item.outcome === 'loss'}
+          class:accent-bar--sky={item.outcome === null}
+        >
+          <div class="feed-body">
+            <span class="feed-q">{item.question}</span>
+            <span class="feed-sub">
+              vs @{item.from} · {item.time}
+            </span>
+          </div>
+          <div class="feed-right">
+            <span class="mono amt">{item.amount} ETH</span>
+            {#if item.outcome === 'win'}
+              <span class="tag tag--win">Won</span>
+            {:else if item.outcome === 'loss'}
+              <span class="tag tag--loss">Lost</span>
+            {:else}
+              <span class="tag tag--active">Active</span>
+            {/if}
+          </div>
         </div>
-      {:else}
-        <div class="feed-list stagger">
-          {#each feedItems as item}
-            <div class="card feed-card">
-              <div class="feed-card-header">
-                <div class="avatar avatar-sm">
-                  {item.payload.creator_id?.[0]?.toUpperCase() || '?'}
-                </div>
-                <div class="feed-card-info">
-                  <span class="feed-type">
-                    {#if item.item_type === 'bet_settled'}
-                      <span class="badge" class:badge-green={item.payload.outcome === 'creator_wins'} class:badge-red={item.payload.outcome === 'opponent_wins'}>
-                        {item.payload.outcome === 'creator_wins' ? 'Won' : 'Lost'}
-                      </span>
-                    {:else}
-                      <span class="badge badge-blue">Active</span>
-                    {/if}
-                  </span>
-                  <span class="text-xs text-muted">{timeAgo(item.created_at)}</span>
-                </div>
-              </div>
-              <p class="feed-question">{item.payload.question}</p>
-              <span class="feed-amount">{formatWei(item.payload.amount_wei)}</span>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </section>
-  </div>
+      {/each}
+    </div>
+  </section>
 </div>
 
 <style>
-  .dashboard { max-width: 1100px; }
+  .dash { max-width: 760px; }
 
-  .page-header {
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    padding: 48px 0 40px;
+    margin-bottom: 12px;
+  }
+  .hero-glow {
+    position: absolute;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 400px;
+    height: 200px;
+    background: radial-gradient(ellipse, rgba(200,255,0,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .lime { color: var(--lime); }
+  .hero-stats {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    margin-bottom: var(--space-xl);
-    gap: var(--space-md);
+    align-items: center;
+    gap: 10px;
+    font-size: 0.875rem;
+    color: var(--text-2);
+    flex-wrap: wrap;
   }
-  .page-header h1 { margin-bottom: 4px; }
-
-  /* Stats */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-md);
-    margin-bottom: var(--space-2xl);
-  }
-  .stat-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    text-align: center;
-  }
-  .stat-value {
-    font-size: 1.75rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 1;
-    margin-bottom: var(--space-xs);
-  }
-  .stat-label {
+  .sep { color: var(--text-3); }
+  .streak {
+    background: var(--amber-dim);
+    color: var(--amber);
+    padding: 2px 10px;
+    border-radius: var(--r-full);
     font-size: 0.75rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
+    font-family: var(--font-display);
   }
 
-  /* Grid */
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-xl);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-md);
-    font-size: 1rem;
-    font-weight: 700;
-  }
-
-  /* Bet incoming cards */
-  .bet-list { display: flex; flex-direction: column; gap: var(--space-md); }
-
-  .bet-card-incoming { position: relative; }
-  .bet-card-top {
+  /* ── Sections ── */
+  .section { margin-bottom: 40px; }
+  .section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: var(--space-sm);
+    margin-bottom: 16px;
   }
-  .bet-question {
+  .section-head h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+  }
+  .count {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-3);
+    background: var(--bg-raised);
+    padding: 2px 8px;
+    border-radius: var(--r-full);
+  }
+
+  /* ── Bet Rows ── */
+  .bet-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 14px 14px 18px;
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .bet-row:last-child { border-bottom: none; }
+  .bet-row:hover { background: var(--bg-raised); }
+
+  .bet-row-body { flex: 1; min-width: 0; }
+  .bet-q {
+    display: block;
     font-weight: 600;
     font-size: 0.9375rem;
-    margin-bottom: var(--space-sm);
-    line-height: 1.4;
+    line-height: 1.35;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .bet-meta {
+  .bet-sub {
+    font-size: 0.75rem;
+    color: var(--text-3);
+  }
+
+  .bet-row-right {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .amt {
     font-size: 0.875rem;
-    margin-bottom: var(--space-md);
+    font-weight: 600;
+    color: var(--text-1);
   }
-  .bet-amount {
-    font-weight: 700;
-    color: var(--accent-blue);
-    font-family: var(--font-mono);
-  }
+
   .bet-actions {
     display: flex;
-    gap: var(--space-sm);
+    gap: 6px;
   }
 
-  /* Feed */
-  .feed-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+  /* ── Feed ── */
+  .feed-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 12px 12px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .feed-row:last-child { border-bottom: none; }
 
-  .feed-card { padding: var(--space-md); }
-  .feed-card-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-sm);
-  }
-  .feed-card-info {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    flex: 1;
-  }
-  .feed-question {
+  .feed-body { flex: 1; min-width: 0; }
+  .feed-q {
+    display: block;
     font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--text-1);
+    margin-bottom: 2px;
   }
-  .feed-amount {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--accent-blue);
-    font-family: var(--font-mono);
+  .feed-sub { font-size: 0.75rem; color: var(--text-3); }
+
+  .feed-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
   }
 
-  @media (max-width: 768px) {
-    .stats-row { grid-template-columns: repeat(2, 1fr); }
-    .dashboard-grid { grid-template-columns: 1fr; }
-    .page-header { flex-direction: column; }
+  /* ── Tags ── */
+  .tag {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--r-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .tag--win { background: var(--lime-dim); color: var(--lime); }
+  .tag--loss { background: var(--rose-dim); color: var(--rose); }
+  .tag--active { background: var(--sky-dim); color: var(--sky); }
+
+  @media (max-width: 640px) {
+    .hero-title { font-size: 1.625rem; }
+    .bet-row, .feed-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .bet-row-right, .feed-right { width: 100%; justify-content: space-between; }
   }
 </style>

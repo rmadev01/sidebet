@@ -1,218 +1,231 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   let activeTab = $state<'nba' | 'politics'>('nba');
 
-  const demoNbaEvents = [
-    { id: 'e1', title: 'Lakers vs Celtics', starts_at: '2026-03-05T19:30:00Z', status: 'upcoming', category: 'nba', cached_odds: { home: 2.15, away: 1.78 }, sport: 'Basketball', league: 'NBA' },
-    { id: 'e2', title: 'Warriors vs Nuggets', starts_at: '2026-03-05T21:00:00Z', status: 'upcoming', category: 'nba', cached_odds: { home: 1.95, away: 1.90 }, sport: 'Basketball', league: 'NBA' },
-    { id: 'e3', title: 'Knicks vs 76ers', starts_at: '2026-03-06T19:00:00Z', status: 'upcoming', category: 'nba', cached_odds: { home: 1.65, away: 2.35 }, sport: 'Basketball', league: 'NBA' },
-    { id: 'e4', title: 'Bucks vs Heat', starts_at: '2026-03-06T20:00:00Z', status: 'live', category: 'nba', cached_odds: { home: 1.45, away: 2.80 }, sport: 'Basketball', league: 'NBA' },
-    { id: 'e5', title: 'Suns vs Mavericks', starts_at: '2026-03-07T21:30:00Z', status: 'upcoming', category: 'nba', cached_odds: { home: 2.05, away: 1.82 }, sport: 'Basketball', league: 'NBA' },
-    { id: 'e6', title: 'Clippers vs Thunder', starts_at: '2026-03-07T20:00:00Z', status: 'upcoming', category: 'nba', cached_odds: { home: 2.50, away: 1.55 }, sport: 'Basketball', league: 'NBA' },
+  const nbaEvents = [
+    { id: 'e1', home: 'Lakers', away: 'Celtics', date: 'Mar 5 · 7:30 PM', status: 'upcoming', odds: { home: 2.15, away: 1.78 } },
+    { id: 'e2', home: 'Warriors', away: 'Nuggets', date: 'Mar 5 · 9:00 PM', status: 'upcoming', odds: { home: 1.95, away: 1.90 } },
+    { id: 'e3', home: 'Knicks', away: '76ers', date: 'Mar 6 · 7:00 PM', status: 'upcoming', odds: { home: 1.65, away: 2.35 } },
+    { id: 'e4', home: 'Bucks', away: 'Heat', date: 'Mar 6 · 8:00 PM', status: 'live', odds: { home: 1.45, away: 2.80 } },
+    { id: 'e5', home: 'Suns', away: 'Mavericks', date: 'Mar 7 · 9:30 PM', status: 'upcoming', odds: { home: 2.05, away: 1.82 } },
+    { id: 'e6', home: 'Clippers', away: 'Thunder', date: 'Mar 7 · 8:00 PM', status: 'upcoming', odds: { home: 2.50, away: 1.55 } },
   ];
 
-  const demoPoliticsEvents = [
-    { id: 'p1', title: 'Will the Democrats win the 2028 presidential election?', starts_at: '2028-11-03T00:00:00Z', status: 'upcoming', category: 'politics', cached_odds: { yes: 0.48, no: 0.52 } },
-    { id: 'p2', title: 'Will there be a government shutdown in 2026?', starts_at: '2026-09-30T00:00:00Z', status: 'upcoming', category: 'politics', cached_odds: { yes: 0.35, no: 0.65 } },
-    { id: 'p3', title: 'Will the Fed cut rates below 3% by Dec 2026?', starts_at: '2026-12-31T00:00:00Z', status: 'upcoming', category: 'politics', cached_odds: { yes: 0.22, no: 0.78 } },
-    { id: 'p4', title: 'Will TikTok be banned in the US by 2027?', starts_at: '2027-01-01T00:00:00Z', status: 'upcoming', category: 'politics', cached_odds: { yes: 0.15, no: 0.85 } },
+  const politicsEvents = [
+    { id: 'p1', question: 'Will the Democrats win the 2028 presidential election?', date: 'Nov 3, 2028', yes: 0.48 },
+    { id: 'p2', question: 'Will there be a government shutdown in 2026?', date: 'Sep 30, 2026', yes: 0.35 },
+    { id: 'p3', question: 'Will the Fed cut rates below 3% by Dec 2026?', date: 'Dec 31, 2026', yes: 0.22 },
+    { id: 'p4', question: 'Will TikTok be banned in the US by 2027?', date: 'Jan 1, 2027', yes: 0.15 },
   ];
 
-  function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  }
-
-  function oddsToProb(odds: number): string {
-    return (100 / odds).toFixed(0) + '%';
-  }
+  function prob(odds: number) { return Math.round(100 / odds) + '%'; }
 </script>
 
 <svelte:head>
   <title>SideBet — Events</title>
-  <meta name="description" content="Browse NBA games and political prediction markets to bet on." />
+  <meta name="description" content="Browse NBA games and political prediction markets." />
 </svelte:head>
 
-<div class="events-page">
-  <div class="page-header animate-slide-up">
-    <h1>Events</h1>
-    <p class="text-secondary">Browse games and markets to bet on</p>
-  </div>
+<div class="events">
+  <h1 class="animate-in">Events</h1>
+  <p class="subtitle animate-in" style="animation-delay:40ms">Browse games and markets to bet on</p>
 
-  <div class="tabs animate-slide-up" style="animation-delay: 60ms">
-    <button class="tab" class:active={activeTab === 'nba'} onclick={() => activeTab = 'nba'}>
-      🏀 NBA
-    </button>
-    <button class="tab" class:active={activeTab === 'politics'} onclick={() => activeTab = 'politics'}>
-      🏛️ Politics
-    </button>
+  <div class="seg-control animate-in" style="animation-delay:80ms">
+    <button class="seg-btn" class:active={activeTab === 'nba'} onclick={() => activeTab = 'nba'}>NBA</button>
+    <button class="seg-btn" class:active={activeTab === 'politics'} onclick={() => activeTab = 'politics'}>Politics</button>
   </div>
 
   {#if activeTab === 'nba'}
-    <div class="grid-cards stagger">
-      {#each demoNbaEvents as event}
-        <div class="card event-card">
-          <div class="event-card-header">
-            <span class="badge" class:badge-green={event.status === 'live'} class:badge-blue={event.status === 'upcoming'}>
-              {#if event.status === 'live'}<span class="status-dot live"></span>{/if}
-              {event.status}
-            </span>
-            <span class="text-xs text-muted">{formatDate(event.starts_at)}</span>
-          </div>
+    <div class="game-grid stagger">
+      {#each nbaEvents as g}
+        <a href="/bets/new?event={g.id}" class="game-card card card-interactive">
+          {#if g.status === 'live'}
+            <div class="live-tag"><span class="dot dot--live"></span> Live</div>
+          {:else}
+            <div class="game-date">{g.date}</div>
+          {/if}
 
-          <h3 class="event-title">{event.title}</h3>
-
-          <div class="odds-row">
-            <div class="odds-box">
-              <span class="odds-label">{event.title.split(' vs ')[0]}</span>
-              <span class="odds-value">{event.cached_odds.home.toFixed(2)}</span>
-              <span class="odds-prob">{oddsToProb(event.cached_odds.home)}</span>
+          <div class="matchup">
+            <div class="team">
+              <span class="team-name">{g.home}</span>
+              <span class="team-odds mono">{g.odds.home.toFixed(2)}</span>
+              <span class="team-prob">{prob(g.odds.home)}</span>
             </div>
-            <div class="odds-vs">VS</div>
-            <div class="odds-box">
-              <span class="odds-label">{event.title.split(' vs ')[1]}</span>
-              <span class="odds-value">{event.cached_odds.away.toFixed(2)}</span>
-              <span class="odds-prob">{oddsToProb(event.cached_odds.away)}</span>
+            <span class="vs">v</span>
+            <div class="team">
+              <span class="team-name">{g.away}</span>
+              <span class="team-odds mono">{g.odds.away.toFixed(2)}</span>
+              <span class="team-prob">{prob(g.odds.away)}</span>
             </div>
           </div>
-
-          <a href="/bets/new?event={event.id}" class="btn btn-primary btn-sm" style="width:100%; margin-top: var(--space-md)">
-            Bet on this game
-          </a>
-        </div>
+        </a>
       {/each}
     </div>
   {:else}
-    <div class="grid-cards stagger">
-      {#each demoPoliticsEvents as event}
-        <div class="card event-card">
-          <div class="event-card-header">
-            <span class="badge badge-blue">Market</span>
-            <span class="text-xs text-muted">{formatDate(event.starts_at)}</span>
+    <div class="markets stagger">
+      {#each politicsEvents as m}
+        <a href="/bets/new?event={m.id}" class="market-row">
+          <div class="market-body">
+            <span class="market-q">{m.question}</span>
+            <span class="market-date">{m.date}</span>
           </div>
-
-          <h3 class="event-title">{event.title}</h3>
-
-          <div class="market-odds">
+          <div class="market-bar-wrap">
             <div class="market-bar">
-              <div class="market-yes" style="width: {event.cached_odds.yes * 100}%">
-                Yes {(event.cached_odds.yes * 100).toFixed(0)}%
-              </div>
-              <div class="market-no">
-                No {(event.cached_odds.no * 100).toFixed(0)}%
-              </div>
+              <div class="bar-yes" style="width:{m.yes * 100}%">{Math.round(m.yes * 100)}%</div>
+              <div class="bar-no">{Math.round((1 - m.yes) * 100)}%</div>
             </div>
-            <div class="market-decimal">
-              <span>Yes: {(1/event.cached_odds.yes).toFixed(2)}</span>
-              <span>No: {(1/event.cached_odds.no).toFixed(2)}</span>
+            <div class="bar-labels">
+              <span>Yes {(1/m.yes).toFixed(2)}</span>
+              <span>No {(1/(1-m.yes)).toFixed(2)}</span>
             </div>
           </div>
-
-          <a href="/bets/new?event={event.id}" class="btn btn-primary btn-sm" style="width:100%; margin-top: var(--space-md)">
-            Bet on this market
-          </a>
-        </div>
+        </a>
       {/each}
     </div>
   {/if}
 </div>
 
 <style>
-  .events-page { max-width: 1100px; }
-  .page-header {
-    margin-bottom: var(--space-lg);
-  }
-  .page-header h1 { margin-bottom: 4px; }
+  .events { max-width: 820px; }
+  .events h1 { margin-bottom: 4px; }
+  .subtitle { color: var(--text-2); font-size: 0.9375rem; margin-bottom: 24px; }
 
-  .event-card { cursor: default; }
-  .event-card-header {
-    display: flex;
-    justify-content: space-between;
+  /* ── NBA Grid ── */
+  .game-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  .game-card {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    padding: 20px;
+  }
+
+  .live-tag {
+    display: inline-flex;
     align-items: center;
-    margin-bottom: var(--space-md);
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--lime);
+    margin-bottom: 14px;
   }
 
-  .event-title {
-    font-size: 1.0625rem;
-    margin-bottom: var(--space-md);
+  .game-date {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    margin-bottom: 14px;
   }
 
-  /* NBA odds */
-  .odds-row {
+  .matchup {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: 12px;
   }
-  .odds-box {
+
+  .team {
     flex: 1;
-    background: var(--bg-input);
-    border-radius: var(--radius-md);
-    padding: var(--space-md);
     text-align: center;
   }
-  .odds-label {
+
+  .team-name {
     display: block;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 4px;
-  }
-  .odds-value {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--accent-blue);
-    font-family: var(--font-mono);
-    letter-spacing: -0.02em;
-  }
-  .odds-prob {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin-top: 2px;
-  }
-  .odds-vs {
-    font-size: 0.6875rem;
-    font-weight: 800;
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 6px;
   }
 
-  /* Politics market bar */
-  .market-odds { margin-bottom: var(--space-sm); }
+  .team-odds {
+    display: block;
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: var(--lime);
+    margin-bottom: 2px;
+  }
+
+  .team-prob {
+    font-size: 0.6875rem;
+    color: var(--text-3);
+  }
+
+  .vs {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: lowercase;
+  }
+
+  /* ── Politics Markets ── */
+  .markets { display: flex; flex-direction: column; gap: 2px; }
+
+  .market-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--dur-fast);
+  }
+  .market-row:hover { background: var(--bg-raised); padding-left: 12px; padding-right: 12px; border-radius: var(--r-md); }
+  .market-row:last-child { border-bottom: none; }
+
+  .market-body { flex: 1; min-width: 0; }
+  .market-q {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+  .market-date { font-size: 0.75rem; color: var(--text-3); }
+
+  .market-bar-wrap { width: 200px; flex-shrink: 0; }
   .market-bar {
     display: flex;
-    height: 32px;
-    border-radius: var(--radius-sm);
+    height: 24px;
+    border-radius: var(--r-sm);
     overflow: hidden;
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 700;
+    font-family: var(--font-display);
   }
-  .market-yes {
-    background: var(--accent-green);
-    color: var(--text-inverse);
+  .bar-yes {
+    background: var(--lime);
+    color: var(--bg-root);
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 40px;
-    transition: width var(--transition-base);
+    min-width: 32px;
   }
-  .market-no {
+  .bar-no {
     flex: 1;
-    background: var(--accent-red);
-    color: white;
+    background: var(--bg-hover);
+    color: var(--text-2);
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 40px;
+    min-width: 32px;
   }
-  .market-decimal {
+  .bar-labels {
     display: flex;
     justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: var(--space-xs);
+    font-size: 0.6875rem;
+    color: var(--text-3);
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+
+  @media (max-width: 640px) {
+    .market-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .market-bar-wrap { width: 100%; }
   }
 </style>

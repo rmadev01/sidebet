@@ -1,146 +1,125 @@
 <script lang="ts">
   let searchQuery = $state('');
-  let activeTab = $state<'friends' | 'requests'>('friends');
 
-  const demoFriends = [
-    { id: 'f1', username: 'chad_bets', display_name: 'Chad', wins: 15, losses: 8, avatar: null },
-    { id: 'f2', username: 'crypto_mike', display_name: 'Mike', wins: 22, losses: 12, avatar: null },
-    { id: 'f3', username: 'hoops_fan', display_name: 'Sarah', wins: 9, losses: 5, avatar: null },
-    { id: 'f4', username: 'dub_nation', display_name: 'Dub', wins: 18, losses: 18, avatar: null },
-    { id: 'f5', username: 'macro_trader', display_name: 'Alex', wins: 30, losses: 14, avatar: null },
+  const friends = [
+    { id: '1', username: 'chad_bets', name: 'Chad', wins: 15, losses: 8, av: 1 },
+    { id: '2', username: 'crypto_mike', name: 'Mike', wins: 22, losses: 12, av: 2 },
+    { id: '3', username: 'hoops_fan', name: 'Sarah', wins: 9, losses: 5, av: 3 },
+    { id: '4', username: 'dub_nation', name: 'Jay', wins: 11, losses: 11, av: 4 },
+    { id: '5', username: 'poly_whale', name: 'Alex', wins: 18, losses: 14, av: 5 },
   ];
 
-  const demoRequests = [
-    { id: 'r1', username: 'new_bettor', display_name: 'Jordan', created_at: '2026-03-01T10:00:00Z' },
-    { id: 'r2', username: 'poly_whale', display_name: 'Sam', created_at: '2026-02-28T15:00:00Z' },
+  const requests = [
+    { id: 'r1', username: 'new_player', name: 'Jordan', av: 6 },
   ];
 
-  $effect(() => {
-    // Filter friends by search (reactive)
-  });
-
-  function filteredFriends() {
-    if (!searchQuery) return demoFriends;
-    const q = searchQuery.toLowerCase();
-    return demoFriends.filter(f =>
-      f.username.toLowerCase().includes(q) || f.display_name.toLowerCase().includes(q)
-    );
-  }
+  let filtered = $derived(
+    searchQuery
+      ? friends.filter(f => f.username.includes(searchQuery.toLowerCase()) || f.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      : friends
+  );
 </script>
 
-<svelte:head>
-  <title>SideBet — Friends</title>
-</svelte:head>
+<svelte:head><title>SideBet — Friends</title></svelte:head>
 
 <div class="friends-page">
-  <div class="page-header animate-slide-up">
-    <h1>Friends</h1>
-    <p class="text-secondary">Manage your betting circle</p>
+  <h1 class="animate-in">Friends</h1>
+  <p class="subtitle animate-in" style="animation-delay:40ms">Manage your betting circle</p>
+
+  <div class="search-row animate-in" style="animation-delay:60ms">
+    <input class="input" bind:value={searchQuery} placeholder="Search friends…" />
   </div>
 
-  <div class="tabs animate-slide-up" style="animation-delay: 60ms">
-    <button class="tab" class:active={activeTab === 'friends'} onclick={() => activeTab = 'friends'}>
-      Friends ({demoFriends.length})
-    </button>
-    <button class="tab" class:active={activeTab === 'requests'} onclick={() => activeTab = 'requests'}>
-      Requests ({demoRequests.length})
-    </button>
-  </div>
-
-  {#if activeTab === 'friends'}
-    <div class="search-bar animate-slide-up" style="animation-delay: 120ms">
-      <input class="input" type="text" placeholder="Search friends..." bind:value={searchQuery} />
-    </div>
-
-    <div class="friends-list stagger">
-      {#each filteredFriends() as friend}
-        <div class="card friend-row">
-          <div class="friend-row-left">
-            <div class="avatar">{friend.display_name[0]}</div>
-            <div class="friend-info">
-              <span class="friend-name">{friend.display_name}</span>
-              <span class="text-xs text-muted">@{friend.username}</span>
+  {#if requests.length > 0}
+    <section class="section animate-in" style="animation-delay:80ms">
+      <h3>Requests <span class="req-count">{requests.length}</span></h3>
+      <div class="stagger">
+        {#each requests as req}
+          <div class="friend-row accent-bar accent-bar--amber">
+            <div class="av av-{req.av}">{req.name[0]}</div>
+            <div class="f-info">
+              <span class="f-name">@{req.username}</span>
+              <span class="f-sub">{req.name}</span>
+            </div>
+            <div class="f-actions">
+              <button class="btn btn-accept btn-sm">Accept</button>
+              <button class="btn btn-ghost btn-sm">Ignore</button>
             </div>
           </div>
-          <div class="friend-row-right">
-            <div class="friend-record">
-              <span class="record-win">{friend.wins}W</span>
-              <span class="text-muted">-</span>
-              <span class="record-loss">{friend.losses}L</span>
-            </div>
-            <a href="/bets/new?opponent={friend.id}" class="btn btn-primary btn-sm">Send Bet</a>
-            <button class="btn btn-ghost btn-sm">⋯</button>
-          </div>
-        </div>
-      {/each}
-    </div>
-  {:else}
-    <div class="stagger">
-      {#each demoRequests as req}
-        <div class="card friend-row">
-          <div class="friend-row-left">
-            <div class="avatar">{req.display_name[0]}</div>
-            <div class="friend-info">
-              <span class="friend-name">{req.display_name}</span>
-              <span class="text-xs text-muted">@{req.username}</span>
-            </div>
-          </div>
-          <div class="friend-row-right">
-            <button class="btn btn-success btn-sm">Accept</button>
-            <button class="btn btn-ghost btn-sm">Decline</button>
-          </div>
-        </div>
-      {/each}
-    </div>
+        {/each}
+      </div>
+    </section>
   {/if}
+
+  <section class="section animate-in" style="animation-delay:120ms">
+    <h3>Your Friends</h3>
+    <div class="stagger">
+      {#each filtered as f}
+        <div class="friend-row">
+          <div class="av av-{f.av}">{f.name[0]}</div>
+          <div class="f-info">
+            <span class="f-name">@{f.username}</span>
+            <span class="f-sub">{f.wins}W – {f.losses}L</span>
+          </div>
+          <a href="/bets/new?opponent={f.id}" class="challenge-link">Challenge</a>
+        </div>
+      {/each}
+    </div>
+  </section>
 </div>
 
 <style>
-  .friends-page { max-width: 800px; }
-  .page-header { margin-bottom: var(--space-lg); }
-  .page-header h1 { margin-bottom: 4px; }
+  .friends-page { max-width: 600px; }
+  .friends-page h1 { margin-bottom: 4px; }
+  .subtitle { color: var(--text-2); font-size: 0.9375rem; margin-bottom: 24px; }
 
-  .search-bar { margin-bottom: var(--space-lg); }
+  .search-row { margin-bottom: 28px; }
+  .search-row .input { max-width: 320px; }
 
-  .friends-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+  .section { margin-bottom: 32px; }
+  .section h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .req-count {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    background: var(--amber-dim);
+    color: var(--amber);
+    padding: 1px 7px;
+    border-radius: var(--r-full);
+  }
 
   .friend-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: var(--space-md) var(--space-lg);
-    gap: var(--space-md);
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
   }
+  .friend-row:last-child { border-bottom: none; }
 
-  .friend-row-left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-  }
-
-  .friend-info { display: flex; flex-direction: column; }
-  .friend-name { font-weight: 600; font-size: 0.9375rem; }
-
-  .friend-row-right {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-
-  .friend-record {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.8125rem;
+  .f-info { flex: 1; }
+  .f-name {
+    display: block;
     font-weight: 600;
-    font-family: var(--font-mono);
-    margin-right: var(--space-sm);
+    font-size: 0.875rem;
+    line-height: 1.3;
   }
-  .record-win { color: var(--accent-green); }
-  .record-loss { color: var(--accent-red); }
+  .f-sub { font-size: 0.75rem; color: var(--text-3); }
 
-  @media (max-width: 640px) {
-    .friend-row { flex-direction: column; align-items: flex-start; }
-    .friend-row-right { margin-top: var(--space-sm); }
+  .f-actions { display: flex; gap: 6px; }
+
+  .challenge-link {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--lime);
+    text-decoration: none;
+    opacity: 0;
+    transition: opacity var(--dur-fast);
   }
+  .friend-row:hover .challenge-link { opacity: 1; }
 </style>

@@ -10,18 +10,15 @@
   let selectedFriend = $state('');
   let expiresHours = $state(24);
 
-  const demoFriends = [
-    { id: 'f1', username: 'chad_bets', display_name: 'Chad', wins: 15, losses: 8 },
-    { id: 'f2', username: 'crypto_mike', display_name: 'Mike', wins: 22, losses: 12 },
-    { id: 'f3', username: 'hoops_fan', display_name: 'Sarah', wins: 9, losses: 5 },
+  const friends = [
+    { id: 'f1', username: 'chad_bets', name: 'Chad', wins: 15, losses: 8, av: 1 },
+    { id: 'f2', username: 'crypto_mike', name: 'Mike', wins: 22, losses: 12, av: 2 },
+    { id: 'f3', username: 'hoops_fan', name: 'Sarah', wins: 9, losses: 5, av: 3 },
+    { id: 'f4', username: 'poly_whale', name: 'Alex', wins: 18, losses: 14, av: 4 },
   ];
 
-  function impliedProb(n: number, d: number): string {
+  function impliedProb(n: number, d: number) {
     return ((d / (n + d)) * 100).toFixed(1) + '%';
-  }
-
-  function marketProb(): string {
-    return '52.3%';
   }
 </script>
 
@@ -29,168 +26,126 @@
   <title>SideBet — New Bet</title>
 </svelte:head>
 
-<div class="new-bet-page">
-  <div class="page-header animate-slide-up">
-    <h1>Create a Bet</h1>
-    <p class="text-secondary">Challenge a friend to a wager</p>
+<div class="create">
+  <h1 class="animate-in">Create a Bet</h1>
+  <p class="subtitle animate-in" style="animation-delay:40ms">Challenge a friend to a wager</p>
+
+  <!-- Step indicator — fading numbers -->
+  <div class="step-row animate-in" style="animation-delay:60ms">
+    <div class="step-item" class:active={step >= 1} class:done={step > 1}><span class="step-n">{step > 1 ? '✓' : '1'}</span> Question</div>
+    <div class="step-line" class:done={step > 1}></div>
+    <div class="step-item" class:active={step >= 2} class:done={step > 2}><span class="step-n">{step > 2 ? '✓' : '2'}</span> Terms</div>
+    <div class="step-line" class:done={step > 2}></div>
+    <div class="step-item" class:active={step >= 3}><span class="step-n">3</span> Send</div>
   </div>
 
-  <!-- Progress Steps -->
-  <div class="steps animate-slide-up" style="animation-delay: 60ms">
-    <div class="step" class:active={step >= 1} class:done={step > 1}>
-      <span class="step-num">{step > 1 ? '✓' : '1'}</span>
-      <span class="step-label">Question</span>
-    </div>
-    <div class="step-line" class:active={step > 1}></div>
-    <div class="step" class:active={step >= 2} class:done={step > 2}>
-      <span class="step-num">{step > 2 ? '✓' : '2'}</span>
-      <span class="step-label">Terms</span>
-    </div>
-    <div class="step-line" class:active={step > 2}></div>
-    <div class="step" class:active={step >= 3}>
-      <span class="step-num">3</span>
-      <span class="step-label">Send</span>
-    </div>
-  </div>
-
-  <div class="form-area animate-slide-up" style="animation-delay: 120ms">
+  <div class="form-area animate-in" style="animation-delay:100ms">
     {#if step === 1}
       <!-- Step 1: Question -->
-      <div class="card-flat form-card">
-        <div class="form-group">
+      <div class="form-card">
+        <div class="field">
           <label class="label">Bet Type</label>
-          <div class="toggle-row">
-            <button class="toggle-btn" class:active={betType === 'event'} onclick={() => betType = 'event'}>
-              📅 From an Event
-            </button>
-            <button class="toggle-btn" class:active={betType === 'custom'} onclick={() => betType = 'custom'}>
-              ✏️ Custom Question
-            </button>
+          <div class="type-toggle">
+            <button class="type-btn" class:active={betType === 'event'} onclick={() => betType = 'event'}>From an Event</button>
+            <button class="type-btn" class:active={betType === 'custom'} onclick={() => betType = 'custom'}>Custom</button>
           </div>
         </div>
 
-        <div class="form-group">
-          <label class="label" for="question">Question / Assertion</label>
-          <textarea
-            id="question"
-            class="input"
-            bind:value={question}
-            placeholder="e.g. The Los Angeles Lakers will defeat the Boston Celtics on March 5, 2026."
-          ></textarea>
-          <span class="text-xs text-muted">This will be the UMA assertion claim. Be specific and unambiguous.</span>
+        <div class="field">
+          <label class="label" for="q">Question / Assertion</label>
+          <textarea id="q" class="input" bind:value={question} placeholder="e.g. The Lakers will defeat the Celtics on March 5, 2026."></textarea>
+          <span class="hint">This will be the UMA assertion claim. Be specific.</span>
         </div>
 
-        <div class="form-row">
-          <div class="form-group" style="flex:1">
-            <label class="label" for="your-position">Your Position</label>
-            <input id="your-position" class="input" bind:value={creatorPosition} placeholder="e.g. Lakers win" />
+        <div class="field-row">
+          <div class="field">
+            <label class="label" for="yp">Your Position</label>
+            <input id="yp" class="input" bind:value={creatorPosition} placeholder="e.g. Lakers win" />
           </div>
-          <div class="form-group" style="flex:1">
-            <label class="label" for="their-position">Their Position</label>
-            <input id="their-position" class="input" bind:value={opponentPosition} placeholder="e.g. Celtics win" />
+          <div class="field">
+            <label class="label" for="tp">Their Position</label>
+            <input id="tp" class="input" bind:value={opponentPosition} placeholder="e.g. Celtics win" />
           </div>
         </div>
 
-        <button class="btn btn-primary btn-lg" style="width:100%" onclick={() => step = 2} disabled={!question || !creatorPosition || !opponentPosition}>
-          Continue →
+        <button class="btn btn-primary btn-lg full-w" onclick={() => step = 2} disabled={!question || !creatorPosition || !opponentPosition}>
+          Continue
         </button>
       </div>
 
     {:else if step === 2}
       <!-- Step 2: Terms & Odds -->
-      <div class="terms-layout">
-        <div class="card-flat form-card">
-          <div class="form-row">
-            <div class="form-group" style="flex:1">
-              <label class="label" for="amount">Wager Amount (ETH)</label>
-              <input id="amount" class="input" type="number" step="0.001" min="0.001" bind:value={amountEth} />
+      <div class="terms-grid">
+        <div class="form-card">
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="amt">Wager (ETH)</label>
+              <input id="amt" class="input" type="number" step="0.001" min="0.001" bind:value={amountEth} />
             </div>
-            <div class="form-group" style="flex:1">
-              <label class="label" for="expires">Expires In (hours)</label>
-              <input id="expires" class="input" type="number" min="1" max="168" bind:value={expiresHours} />
+            <div class="field">
+              <label class="label" for="exp">Expires in (hours)</label>
+              <input id="exp" class="input" type="number" min="1" max="168" bind:value={expiresHours} />
             </div>
           </div>
 
-          <div class="form-group">
+          <div class="field">
             <label class="label">Your Odds</label>
-            <div class="odds-input-row">
-              <input class="input odds-input" type="number" min="1" bind:value={oddsNumerator} />
+            <div class="odds-row">
+              <input class="input odds-in" type="number" min="1" bind:value={oddsNumerator} />
               <span class="odds-colon">:</span>
-              <input class="input odds-input" type="number" min="1" bind:value={oddsDenominator} />
+              <input class="input odds-in" type="number" min="1" bind:value={oddsDenominator} />
             </div>
-            <span class="text-xs text-muted">Your implied probability: {impliedProb(oddsNumerator, oddsDenominator)}</span>
+            <span class="hint">Implied probability: {impliedProb(oddsNumerator, oddsDenominator)}</span>
           </div>
 
-          <div class="form-actions">
-            <button class="btn btn-ghost" onclick={() => step = 1}>← Back</button>
-            <button class="btn btn-primary btn-lg" style="flex:1" onclick={() => step = 3}>
-              Choose Opponent →
-            </button>
+          <div class="btns-row">
+            <button class="btn btn-ghost" onclick={() => step = 1}>Back</button>
+            <button class="btn btn-primary btn-lg" style="flex:1" onclick={() => step = 3}>Choose Opponent</button>
           </div>
         </div>
 
-        <!-- Reference Odds Panel -->
-        <div class="card-flat odds-panel">
-          <h4>📊 Reference Odds</h4>
-          <div class="ref-row">
-            <span class="ref-label">Sportsbook Avg</span>
-            <span class="ref-value">1.82 ({marketProb()})</span>
-          </div>
-          <div class="ref-row">
-            <span class="ref-label">Polymarket</span>
-            <span class="ref-value">1.91 ({marketProb()})</span>
-          </div>
-          <div class="ref-row highlight">
-            <span class="ref-label">Your Odds</span>
-            <span class="ref-value">{((oddsNumerator + oddsDenominator) / oddsDenominator).toFixed(2)} ({impliedProb(oddsNumerator, oddsDenominator)})</span>
-          </div>
-          <div class="delta-indicator">
-            <span class="delta-label">Delta from market</span>
-            <span class="delta-value" style="color: var(--accent-gold)">+8.2%</span>
+        <!-- Odds comparison -->
+        <div class="odds-panel">
+          <h4>Reference Odds</h4>
+          <div class="ref-item"><span class="ref-label">Sportsbook Avg</span><span class="mono ref-val">1.82</span></div>
+          <div class="ref-item"><span class="ref-label">Polymarket</span><span class="mono ref-val">1.91</span></div>
+          <div class="ref-item ref-yours"><span class="ref-label">Your odds</span><span class="mono ref-val">{((oddsNumerator + oddsDenominator) / oddsDenominator).toFixed(2)}</span></div>
+          <div class="ref-delta">
+            <span>Delta from market</span>
+            <span class="mono" style="color:var(--amber)">+8.2%</span>
           </div>
         </div>
       </div>
 
     {:else}
       <!-- Step 3: Select Opponent -->
-      <div class="card-flat form-card">
-        <div class="form-group">
+      <div class="form-card">
+        <div class="field">
           <label class="label">Select Opponent</label>
-          <div class="friends-select">
-            {#each demoFriends as friend}
-              <button
-                class="friend-option card"
-                class:selected={selectedFriend === friend.id}
-                onclick={() => selectedFriend = friend.id}
-              >
-                <div class="avatar">{friend.display_name[0]}</div>
-                <div class="friend-option-info">
-                  <span class="friend-option-name">@{friend.username}</span>
-                  <span class="text-xs text-muted">{friend.wins}W - {friend.losses}L</span>
-                </div>
-                {#if selectedFriend === friend.id}
-                  <span style="color: var(--accent-green)">✓</span>
-                {/if}
+          <div class="friend-scroll">
+            {#each friends as f}
+              <button class="f-chip" class:selected={selectedFriend === f.id} onclick={() => selectedFriend = f.id}>
+                <div class="av av-{f.av}">{f.name[0]}</div>
+                <span class="f-name">@{f.username}</span>
+                <span class="f-record">{f.wins}W–{f.losses}L</span>
               </button>
             {/each}
           </div>
         </div>
 
-        <!-- Summary -->
-        <div class="bet-summary">
-          <h4>Bet Summary</h4>
-          <div class="summary-row"><span>Question:</span> <span>{question}</span></div>
-          <div class="summary-row"><span>Your Pick:</span> <span>{creatorPosition}</span></div>
-          <div class="summary-row"><span>Amount:</span> <span class="bet-row-amount">{amountEth} ETH</span></div>
-          <div class="summary-row"><span>Odds:</span> <span>{oddsNumerator}:{oddsDenominator}</span></div>
-          <div class="summary-row"><span>Expires:</span> <span>{expiresHours}h</span></div>
+        <!-- Receipt-style summary -->
+        <div class="receipt">
+          <div class="receipt-title">Summary</div>
+          <div class="receipt-row"><span>Question</span><span class="receipt-val">{question.length > 40 ? question.slice(0, 40) + '…' : question}</span></div>
+          <div class="receipt-row"><span>Your pick</span><span class="receipt-val">{creatorPosition}</span></div>
+          <div class="receipt-row"><span>Amount</span><span class="receipt-val mono">{amountEth} ETH</span></div>
+          <div class="receipt-row"><span>Odds</span><span class="receipt-val">{oddsNumerator}:{oddsDenominator}</span></div>
+          <div class="receipt-row"><span>Expires</span><span class="receipt-val">{expiresHours}h</span></div>
         </div>
 
-        <div class="form-actions">
-          <button class="btn btn-ghost" onclick={() => step = 2}>← Back</button>
-          <button class="btn btn-success btn-lg" style="flex:1" disabled={!selectedFriend}>
-            🎲 Send Bet
-          </button>
+        <div class="btns-row">
+          <button class="btn btn-ghost" onclick={() => step = 2}>Back</button>
+          <button class="btn btn-primary btn-lg" style="flex:1" disabled={!selectedFriend}>Send Bet</button>
         </div>
       </div>
     {/if}
@@ -198,174 +153,200 @@
 </div>
 
 <style>
-  .new-bet-page { max-width: 900px; }
-  .page-header { margin-bottom: var(--space-lg); }
-  .page-header h1 { margin-bottom: 4px; }
+  .create { max-width: 860px; }
+  .create h1 { margin-bottom: 4px; }
+  .subtitle { color: var(--text-2); font-size: 0.9375rem; margin-bottom: 28px; }
 
-  /* Steps */
-  .steps {
+  /* ── Steps ── */
+  .step-row {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0;
-    margin-bottom: var(--space-2xl);
+    margin-bottom: 32px;
   }
-  .step {
+  .step-item {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    opacity: 0.4;
-    transition: opacity var(--transition-base);
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-3);
+    transition: color var(--dur-base);
   }
-  .step.active { opacity: 1; }
-  .step-num {
-    width: 28px;
-    height: 28px;
-    display: flex;
+  .step-item.active { color: var(--text-1); }
+  .step-n {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--bg-card);
-    font-size: 0.8125rem;
+    font-size: 0.6875rem;
     font-weight: 700;
-    border: 1px solid var(--border-color);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
   }
-  .step.active .step-num {
-    background: var(--accent-blue);
-    border-color: var(--accent-blue);
-    color: white;
+  .step-item.active .step-n {
+    background: var(--lime);
+    border-color: var(--lime);
+    color: var(--bg-root);
   }
-  .step.done .step-num {
-    background: var(--accent-green);
-    border-color: var(--accent-green);
-    color: white;
+  .step-item.done .step-n {
+    background: var(--lime-dim);
+    border-color: var(--lime);
+    color: var(--lime);
   }
-  .step-label { font-size: 0.875rem; font-weight: 500; }
   .step-line {
-    width: 60px;
-    height: 2px;
-    background: var(--border-color);
-    margin: 0 var(--space-sm);
-    transition: background var(--transition-base);
+    width: 48px;
+    height: 1px;
+    background: var(--border);
+    margin: 0 8px;
   }
-  .step-line.active { background: var(--accent-blue); }
+  .step-line.done { background: var(--lime); }
 
-  /* Form */
-  .form-card { max-width: 600px; margin: 0 auto; }
-  .form-group { margin-bottom: var(--space-lg); }
-  .form-row { display: flex; gap: var(--space-md); }
-  .form-actions { display: flex; gap: var(--space-md); margin-top: var(--space-lg); }
+  /* ── Form Card ── */
+  .form-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 28px;
+    max-width: 560px;
+    margin: 0 auto;
+  }
 
-  .toggle-row { display: flex; gap: var(--space-sm); }
-  .toggle-btn {
+  .field { margin-bottom: 20px; }
+  .field-row { display: flex; gap: 14px; margin-bottom: 20px; }
+  .field-row .field { flex: 1; margin-bottom: 0; }
+  .hint { font-size: 0.6875rem; color: var(--text-3); margin-top: 4px; display: block; }
+  .full-w { width: 100%; }
+
+  .type-toggle { display: flex; gap: 6px; }
+  .type-btn {
     flex: 1;
-    padding: var(--space-md);
+    padding: 10px;
     background: var(--bg-input);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    color: var(--text-3);
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all var(--dur-fast);
   }
-  .toggle-btn.active {
-    border-color: var(--accent-blue);
-    background: var(--accent-blue-dim);
-    color: var(--text-primary);
-  }
-
-  .odds-input-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-  .odds-input { width: 80px; text-align: center; }
-  .odds-colon {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--text-muted);
+  .type-btn.active {
+    border-color: var(--lime);
+    background: var(--lime-dim);
+    color: var(--text-1);
   }
 
-  /* Terms layout */
-  .terms-layout {
+  .odds-row { display: flex; align-items: center; gap: 8px; }
+  .odds-in { width: 72px; text-align: center; }
+  .odds-colon { font-size: 1.125rem; font-weight: 800; color: var(--text-3); }
+
+  .btns-row { display: flex; gap: 10px; margin-top: 24px; }
+
+  /* ── Terms Grid ── */
+  .terms-grid {
     display: flex;
-    gap: var(--space-xl);
+    gap: 20px;
     align-items: flex-start;
   }
-  .terms-layout .form-card { flex: 1; }
+  .terms-grid .form-card { flex: 1; max-width: none; }
 
-  /* Odds Panel */
+  /* ── Odds Panel ── */
   .odds-panel {
-    width: 280px;
+    width: 240px;
     flex-shrink: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 20px;
     position: sticky;
-    top: var(--space-xl);
+    top: calc(var(--nav-height) + 16px);
   }
-  .odds-panel h4 { margin-bottom: var(--space-md); }
-  .ref-row {
+  .odds-panel h4 { margin-bottom: 14px; font-size: 0.875rem; }
+  .ref-item {
     display: flex;
     justify-content: space-between;
-    padding: var(--space-sm) 0;
-    border-bottom: 1px solid var(--border-subtle);
-    font-size: 0.875rem;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8125rem;
   }
-  .ref-label { color: var(--text-muted); }
-  .ref-value { font-weight: 600; font-family: var(--font-mono); }
-  .ref-row.highlight { color: var(--accent-blue); }
-  .delta-indicator {
+  .ref-label { color: var(--text-3); }
+  .ref-val { font-weight: 600; font-size: 0.8125rem; }
+  .ref-yours { color: var(--lime); }
+  .ref-delta {
     display: flex;
     justify-content: space-between;
-    padding-top: var(--space-md);
-    font-size: 0.875rem;
+    padding-top: 10px;
+    font-size: 0.8125rem;
+    color: var(--text-3);
   }
-  .delta-label { color: var(--text-muted); }
-  .delta-value { font-weight: 700; }
 
-  /* Friend select */
-  .friends-select { display: flex; flex-direction: column; gap: var(--space-sm); }
-  .friend-option {
+  /* ── Friend Selector ── */
+  .friend-scroll {
     display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .f-chip {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: var(--space-md);
-    cursor: pointer;
-    border: 1px solid var(--border-subtle);
-    text-align: left;
-    font-family: var(--font-sans);
-    padding: var(--space-md);
-  }
-  .friend-option.selected {
-    border-color: var(--accent-green);
-    background: var(--accent-green-dim);
-  }
-  .friend-option-info { flex: 1; display: flex; flex-direction: column; }
-  .friend-option-name { font-weight: 600; font-size: 0.9375rem; }
-
-  /* Summary */
-  .bet-summary {
+    gap: 6px;
+    padding: 14px 16px;
     background: var(--bg-input);
-    border-radius: var(--radius-md);
-    padding: var(--space-lg);
-    margin-top: var(--space-lg);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    cursor: pointer;
+    transition: all var(--dur-fast);
+    flex-shrink: 0;
+    min-width: 100px;
+    font-family: var(--font-body);
   }
-  .bet-summary h4 { margin-bottom: var(--space-md); }
-  .summary-row {
+  .f-chip:hover { border-color: var(--border-strong); }
+  .f-chip.selected {
+    border-color: var(--lime);
+    background: var(--lime-dim);
+  }
+  .f-name { font-size: 0.75rem; font-weight: 600; color: var(--text-1); }
+  .f-record { font-size: 0.6875rem; color: var(--text-3); }
+
+  /* ── Receipt Summary ── */
+  .receipt {
+    margin-top: 20px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--r-md);
+    padding: 16px;
+  }
+  .receipt-title {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+  .receipt-row {
     display: flex;
     justify-content: space-between;
-    padding: var(--space-xs) 0;
-    font-size: 0.875rem;
+    padding: 4px 0;
+    font-size: 0.8125rem;
+    color: var(--text-2);
   }
-  .summary-row span:first-child { color: var(--text-muted); }
+  .receipt-val { color: var(--text-1); font-weight: 500; }
 
-  .bet-row-amount {
-    font-weight: 700;
-    font-family: var(--font-mono);
-    color: var(--accent-blue);
-  }
-
-  @media (max-width: 768px) {
-    .terms-layout { flex-direction: column; }
+  @media (max-width: 720px) {
+    .terms-grid { flex-direction: column; }
     .odds-panel { width: 100%; position: static; }
-    .form-row { flex-direction: column; }
+    .field-row { flex-direction: column; }
+    .friend-scroll { flex-wrap: wrap; }
+    .f-chip { min-width: 0; flex: 1; }
   }
 </style>

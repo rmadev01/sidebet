@@ -1,211 +1,255 @@
 <script lang="ts">
-  import { user, isAuthenticated } from '$lib/stores';
+  import { user } from '$lib/stores';
 
   const stats = {
     wins: 12,
     losses: 8,
-    winRate: '60.0',
+    winRate: 60.0,
     streak: 3,
     streakType: 'W',
     totalWagered: '2.450',
     totalBets: 20,
     activeBets: 3,
-    avgBetSize: '0.123',
+    avgBet: '0.123',
     bestWin: '1.000',
-    accuracy: {
-      nba: '66.7',
-      politics: '50.0',
-    }
+    accuracy: { nba: 66.7, politics: 50.0 },
   };
+
+  // SVG donut for win rate
+  const circumference = 2 * Math.PI * 44;
+  const winOffset = circumference - (stats.winRate / 100) * circumference;
 </script>
 
-<svelte:head>
-  <title>SideBet — Profile</title>
-</svelte:head>
+<svelte:head><title>SideBet — Profile</title></svelte:head>
 
-<div class="profile-page">
-  <div class="profile-header animate-slide-up">
-    <div class="avatar avatar-lg">
-      {$user?.name?.[0]?.toUpperCase() || 'U'}
-    </div>
-    <div class="profile-info">
+<div class="profile">
+  <!-- Header -->
+  <div class="prof-head animate-in">
+    <div class="av av--lg av-1">{$user?.name?.[0]?.toUpperCase() || 'U'}</div>
+    <div class="prof-info">
       <h1>{$user?.name || 'Username'}</h1>
-      <p class="text-secondary">@{$user?.name?.toLowerCase()?.replace(/\s/g, '_') || 'user'}</p>
-    </div>
-    <button class="btn btn-ghost">Edit Profile</button>
-  </div>
-
-  <!-- Win/Loss Banner -->
-  <div class="wl-banner animate-slide-up" style="animation-delay: 60ms">
-    <div class="wl-main">
-      <span class="wl-wins">{stats.wins}</span>
-      <span class="wl-separator">—</span>
-      <span class="wl-losses">{stats.losses}</span>
-    </div>
-    <span class="wl-rate">{stats.winRate}% Win Rate</span>
-    <div class="streak-badge">
-      🔥 {stats.streak}{stats.streakType} Streak
+      <span class="handle">@{$user?.name?.toLowerCase()?.replace(/\s/g, '_') || 'user'}</span>
     </div>
   </div>
 
-  <!-- Stats Grid -->
-  <div class="stats-grid stagger">
-    <div class="card stat-tile">
-      <span class="stat-tile-value">{stats.totalWagered} ETH</span>
-      <span class="stat-tile-label">Total Wagered</span>
+  <!-- Win Rate Ring + Record -->
+  <div class="record-section animate-in" style="animation-delay:60ms">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 100 100" class="ring-svg">
+        <circle cx="50" cy="50" r="44" fill="none" stroke="var(--bg-raised)" stroke-width="6" />
+        <circle cx="50" cy="50" r="44" fill="none" stroke="var(--lime)" stroke-width="6"
+          stroke-linecap="round"
+          stroke-dasharray={circumference}
+          stroke-dashoffset={winOffset}
+          transform="rotate(-90 50 50)"
+          class="ring-fill" />
+      </svg>
+      <div class="ring-center">
+        <span class="ring-pct">{stats.winRate}%</span>
+        <span class="ring-label">win rate</span>
+      </div>
     </div>
-    <div class="card stat-tile">
-      <span class="stat-tile-value">{stats.totalBets}</span>
-      <span class="stat-tile-label">Total Bets</span>
-    </div>
-    <div class="card stat-tile">
-      <span class="stat-tile-value">{stats.activeBets}</span>
-      <span class="stat-tile-label">Active</span>
-    </div>
-    <div class="card stat-tile">
-      <span class="stat-tile-value">{stats.avgBetSize} ETH</span>
-      <span class="stat-tile-label">Avg Bet Size</span>
-    </div>
-    <div class="card stat-tile">
-      <span class="stat-tile-value">{stats.bestWin} ETH</span>
-      <span class="stat-tile-label">Best Win</span>
-    </div>
-    <div class="card stat-tile">
-      <span class="stat-tile-value">—</span>
-      <span class="stat-tile-label">Wallet</span>
+
+    <div class="record-nums">
+      <div class="rec">
+        <span class="rec-n" style="color:var(--lime)">{stats.wins}</span>
+        <span class="rec-l">Wins</span>
+      </div>
+      <div class="rec-sep"></div>
+      <div class="rec">
+        <span class="rec-n" style="color:var(--rose)">{stats.losses}</span>
+        <span class="rec-l">Losses</span>
+      </div>
+      <div class="rec-sep"></div>
+      <div class="rec">
+        <span class="rec-n" style="color:var(--amber)">{stats.streak}{stats.streakType}</span>
+        <span class="rec-l">Streak</span>
+      </div>
     </div>
   </div>
 
-  <!-- Accuracy by Category -->
-  <div class="accuracy-section animate-slide-up" style="animation-delay: 240ms">
+  <!-- Stats Strip -->
+  <div class="stats-strip animate-in" style="animation-delay:120ms">
+    <div class="stat-item"><span class="stat-val mono">{stats.totalWagered}</span><span class="stat-unit">ETH wagered</span></div>
+    <div class="stat-item"><span class="stat-val mono">{stats.totalBets}</span><span class="stat-unit">total bets</span></div>
+    <div class="stat-item"><span class="stat-val mono">{stats.activeBets}</span><span class="stat-unit">active</span></div>
+    <div class="stat-item"><span class="stat-val mono">{stats.avgBet}</span><span class="stat-unit">avg bet</span></div>
+    <div class="stat-item"><span class="stat-val mono">{stats.bestWin}</span><span class="stat-unit">best win</span></div>
+  </div>
+
+  <!-- Accuracy -->
+  <section class="accuracy-section animate-in" style="animation-delay:180ms">
     <h3>Accuracy by Category</h3>
-    <div class="accuracy-bars">
-      <div class="accuracy-row">
-        <span class="accuracy-label">🏀 NBA</span>
-        <div class="accuracy-bar-track">
-          <div class="accuracy-bar-fill" style="width: {stats.accuracy.nba}%; background: var(--accent-green)"></div>
+    <div class="acc-bars">
+      <div class="acc-row">
+        <span class="acc-label">NBA</span>
+        <div class="acc-track">
+          <div class="acc-fill" style="width:{stats.accuracy.nba}%; background:var(--lime)">
+            <span class="acc-pct">{stats.accuracy.nba}%</span>
+          </div>
         </div>
-        <span class="accuracy-value">{stats.accuracy.nba}%</span>
       </div>
-      <div class="accuracy-row">
-        <span class="accuracy-label">🏛️ Politics</span>
-        <div class="accuracy-bar-track">
-          <div class="accuracy-bar-fill" style="width: {stats.accuracy.politics}%; background: var(--accent-blue)"></div>
+      <div class="acc-row">
+        <span class="acc-label">Politics</span>
+        <div class="acc-track">
+          <div class="acc-fill" style="width:{stats.accuracy.politics}%; background:var(--sky)">
+            <span class="acc-pct">{stats.accuracy.politics}%</span>
+          </div>
         </div>
-        <span class="accuracy-value">{stats.accuracy.politics}%</span>
       </div>
     </div>
-  </div>
+  </section>
 </div>
 
 <style>
-  .profile-page { max-width: 800px; }
+  .profile { max-width: 640px; }
 
-  .profile-header {
+  /* ── Header ── */
+  .prof-head {
     display: flex;
     align-items: center;
-    gap: var(--space-lg);
-    margin-bottom: var(--space-2xl);
+    gap: 16px;
+    margin-bottom: 36px;
   }
-  .profile-info h1 { margin-bottom: 2px; }
+  .prof-info h1 { margin-bottom: 2px; }
+  .handle { font-size: 0.875rem; color: var(--text-3); }
 
-  /* W/L Banner */
-  .wl-banner {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xl);
-    padding: var(--space-xl) var(--space-2xl);
-    text-align: center;
-    margin-bottom: var(--space-2xl);
-  }
-  .wl-main {
-    font-size: 3rem;
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    line-height: 1;
-    margin-bottom: var(--space-sm);
-  }
-  .wl-wins { color: var(--accent-green); }
-  .wl-separator { color: var(--text-muted); margin: 0 var(--space-md); }
-  .wl-losses { color: var(--accent-red); }
-  .wl-rate {
-    display: block;
-    font-size: 0.9375rem;
-    color: var(--text-secondary);
-    margin-bottom: var(--space-sm);
-  }
-  .streak-badge {
-    display: inline-block;
-    background: var(--accent-gold-dim);
-    color: var(--accent-gold);
-    padding: var(--space-xs) var(--space-md);
-    border-radius: var(--radius-full);
-    font-size: 0.8125rem;
-    font-weight: 700;
+  /* ── Record Section ── */
+  .record-section {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    margin-bottom: 36px;
+    padding: 28px 32px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
   }
 
-  /* Stats Grid */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-md);
-    margin-bottom: var(--space-2xl);
+  .ring-wrap {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    flex-shrink: 0;
   }
-  .stat-tile {
-    text-align: center;
-    padding: var(--space-lg);
+  .ring-svg { width: 100%; height: 100%; }
+  .ring-fill { transition: stroke-dashoffset 0.8s var(--ease-out); }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
-  .stat-tile-value {
-    display: block;
+  .ring-pct {
+    font-family: var(--font-display);
     font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--accent-blue);
-    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--lime);
+    line-height: 1;
+  }
+  .ring-label { font-size: 0.625rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+  .record-nums {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .rec { text-align: center; }
+  .rec-n {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
     margin-bottom: 4px;
   }
-  .stat-tile-label {
+  .rec-l {
     font-size: 0.6875rem;
-    font-weight: 600;
+    color: var(--text-3);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .rec-sep {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
   }
 
-  /* Accuracy */
-  .accuracy-section h3 { margin-bottom: var(--space-lg); }
-  .accuracy-bars { display: flex; flex-direction: column; gap: var(--space-md); }
-  .accuracy-row {
+  /* ── Stats Strip ── */
+  .stats-strip {
     display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 0;
+    margin-bottom: 36px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .stat-item {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: var(--space-md);
+    padding: 14px 18px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    flex-shrink: 0;
+    min-width: 100px;
   }
-  .accuracy-label {
-    width: 100px;
-    font-size: 0.875rem;
+  .stat-val {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-1);
+    margin-bottom: 2px;
+  }
+  .stat-unit {
+    font-size: 0.625rem;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  /* ── Accuracy ── */
+  .accuracy-section h3 { margin-bottom: 16px; }
+  .acc-bars { display: flex; flex-direction: column; gap: 12px; }
+  .acc-row { display: flex; align-items: center; gap: 14px; }
+  .acc-label {
+    width: 70px;
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
     font-weight: 500;
+    color: var(--text-2);
+    flex-shrink: 0;
   }
-  .accuracy-bar-track {
+  .acc-track {
     flex: 1;
-    height: 8px;
-    background: var(--bg-input);
-    border-radius: var(--radius-full);
+    height: 24px;
+    background: var(--bg-raised);
+    border-radius: var(--r-md);
     overflow: hidden;
   }
-  .accuracy-bar-fill {
+  .acc-fill {
     height: 100%;
-    border-radius: var(--radius-full);
-    transition: width var(--transition-slow);
+    border-radius: var(--r-md);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    transition: width 0.6s var(--ease-out);
   }
-  .accuracy-value {
-    width: 50px;
-    text-align: right;
-    font-size: 0.875rem;
-    font-weight: 700;
+  .acc-pct {
     font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--bg-root);
   }
 
-  @media (max-width: 640px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .profile-header { flex-direction: column; text-align: center; }
+  @media (max-width: 600px) {
+    .record-section { flex-direction: column; gap: 20px; padding: 20px; }
+    .record-nums { gap: 16px; }
+    .prof-head { flex-direction: column; text-align: center; }
   }
 </style>
