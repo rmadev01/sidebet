@@ -5,26 +5,33 @@ mod routes;
 mod services;
 mod ws;
 
+use axum::http::HeaderValue;
 use axum::{
     middleware,
     routing::{delete, get, patch, post},
     Extension, Router,
 };
+use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+static MIGRATOR: Migrator = sqlx::migrate!("./src/db/migrations");
 
 #[tokio::main]
 async fn main() {
     // Init tracing
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "sidebet_backend=debug,tower_http=debug".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "sidebet_backend=debug,tower_http=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     let cfg = config::Config::from_env();
+    cfg.log_startup_warnings();
 
     // Database pool
     let pool = PgPoolOptions::new()
@@ -41,12 +48,16 @@ async fn main() {
     // WebSocket broadcast
     let ws_broadcast = ws::create_broadcast();
 
-    // CORS
+    // CORS — must allow credentials for cookie-based auth
+    let frontend_origin: HeaderValue = cfg
+        .frontend_url
+        .parse()
+        .expect("FRONTEND_URL must be a valid origin");
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_credentials(false);
+        .allow_origin(frontend_origin)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any)
+        .allow_credentials(true);
 
     // Auth-protected routes
     let protected = Router::new()
@@ -57,8 +68,14 @@ async fn main() {
         .route("/friends", get(routes::friends::list_friends))
         .route("/friends/requests", get(routes::friends::incoming_requests))
         .route("/friends/request", post(routes::friends::send_request))
-        .route("/friends/{id}/accept", post(routes::friends::accept_request))
-        .route("/friends/{id}/decline", post(routes::friends::decline_request))
+        .route(
+            "/friends/{id}/accept",
+            post(routes::friends::accept_request),
+        )
+        .route(
+            "/friends/{id}/decline",
+            post(routes::friends::decline_request),
+        )
         .route("/friends/{id}", delete(routes::friends::remove_friend))
         // Bets
         .route("/bets", post(routes::bets::create_bet))
@@ -77,7 +94,10 @@ async fn main() {
     // Public routes
     let public = Router::new()
         .route("/users/search", get(routes::users::search_users))
-        .route("/users/{username}", get(routes::users::get_user_by_username))
+        .route(
+            "/users/{username}",
+            get(routes::users::get_user_by_username),
+        )
         .route("/events", get(routes::events::list_events))
         .route("/events/{id}", get(routes::events::get_event))
         .route("/events/{id}/odds", get(routes::events::get_event_odds));
@@ -86,6 +106,7 @@ async fn main() {
         .nest("/api", protected)
         .nest("/api", public)
         .layer(Extension(pool))
+        .layer(Extension(cfg.clone()))
         .layer(Extension(ws_broadcast))
         .layer(cors)
         .layer(TraceLayer::new_for_http());
@@ -98,50 +119,8 @@ async fn main() {
 }
 
 async fn run_migrations(pool: &sqlx::PgPool) {
-    // Create migrations tracking table
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())"
-    )
-    .execute(pool)
-    .await
-    .expect("Failed to create migrations table");
-
-    let mut entries: Vec<_> = std::fs::read_dir("./src/db/migrations")
-        .expect("Failed to read migrations directory")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "sql"))
-        .collect();
-
-    entries.sort_by_key(|e| e.file_name());
-
-    for entry in entries {
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        let already_applied: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM _migrations WHERE name = $1)"
-        )
-        .bind(&name)
-        .fetch_one(pool)
+    MIGRATOR
+        .run(pool)
         .await
-        .unwrap_or(false);
-
-        if already_applied {
-            continue;
-        }
-
-        let sql = std::fs::read_to_string(entry.path())
-            .unwrap_or_else(|_| panic!("Failed to read migration: {name}"));
-
-        tracing::info!("Applying migration: {name}");
-        sqlx::query(&sql)
-            .execute(pool)
-            .await
-            .unwrap_or_else(|e| panic!("Failed migration {name}: {e}"));
-
-        sqlx::query("INSERT INTO _migrations (name) VALUES ($1)")
-            .bind(&name)
-            .execute(pool)
-            .await
-            .unwrap_or_else(|_| panic!("Failed to record migration: {name}"));
-    }
+        .expect("Failed to run SQL migrations");
 }

@@ -5,7 +5,6 @@ use axum::{
 };
 use serde::Deserialize;
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use crate::models::{PublicUser, UpdateProfile, User};
 
@@ -65,13 +64,11 @@ pub async fn get_user_by_username(
     Extension(pool): Extension<PgPool>,
     Path(username): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE username = $1",
-    )
-    .bind(&username)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
+        .bind(&username)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match user {
         Some(u) => Ok(Json(serde_json::to_value(PublicUser::from(u)).unwrap())),
