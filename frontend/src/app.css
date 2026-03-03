@@ -498,3 +498,26 @@ textarea.input {
     margin: 0 auto;
     padding: 0 24px;
 }
+
+/* ── Mobile-Ready ── */
+body {
+    padding:
+        env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch-friendly tap targets */
+.btn,
+.tab,
+.seg-btn,
+.nav-link,
+.friend-option,
+.event-option {
+    min-height: 44px;
+}
+
+@media (max-width: 640px) {
+    .page-w {
+        padding: 0 16px;
+    }
+}

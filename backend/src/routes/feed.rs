@@ -54,7 +54,7 @@ pub async fn get_feed(
                 "question": b.question,
                 "creator_id": b.creator_id,
                 "opponent_id": b.opponent_id,
-                "amount_wei": b.amount_wei,
+                "amount": b.amount,
                 "status": b.status,
                 "outcome": b.outcome,
             }),

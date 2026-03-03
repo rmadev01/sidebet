@@ -1,8 +1,8 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
-  import { user, isAuthenticated } from '$lib/stores';
-  import { getSession } from '$lib/api';
+  import { user, isAuthenticated, coinBalance } from '$lib/stores';
+  import { getSession, getBalance } from '$lib/api';
   import { page } from '$app/stores';
 
   let { children } = $props();
@@ -22,6 +22,10 @@
       if (session?.user) {
         user.set(session.user);
         isAuthenticated.set(true);
+        try {
+          const wallet = await getBalance();
+          coinBalance.set(wallet.coin_balance);
+        } catch { /* wallet fetch fails if not authed yet */ }
       }
     } catch { /* not logged in */ }
   });
@@ -29,6 +33,12 @@
   function isActive(href: string): boolean {
     if (href === '/') return $page.url.pathname === '/';
     return $page.url.pathname.startsWith(href);
+  }
+
+  function formatCoins(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return n.toLocaleString();
   }
 </script>
 
@@ -51,6 +61,10 @@
 
       <div class="nav-right">
         {#if $isAuthenticated}
+          <span class="coin-badge" title="Your coin balance">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="var(--lime)" opacity="0.2"/><circle cx="12" cy="12" r="6" fill="var(--lime)"/></svg>
+            <span class="coin-bal">{formatCoins($coinBalance)}</span>
+          </span>
           <a href="/bets/new" class="btn btn-primary btn-sm">New Bet</a>
           <a href="/profile" class="av av-1 av--sm">
             {$user?.name?.[0]?.toUpperCase() || '?'}
@@ -150,6 +164,21 @@
     gap: 10px;
     flex-shrink: 0;
   }
+
+  .coin-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--lime-dim);
+    padding: 4px 10px;
+    border-radius: var(--r-full);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--lime);
+    cursor: default;
+  }
+  .coin-bal { line-height: 1; }
 
   .burger {
     display: none;

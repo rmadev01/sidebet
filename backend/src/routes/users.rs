@@ -21,10 +21,10 @@ pub async fn get_me(Extension(user): Extension<User>) -> impl IntoResponse {
         "display_name": user.display_name,
         "avatar_url": user.avatar_url,
         "bio": user.bio,
-        "wallet_address": user.wallet_address,
+        "coin_balance": user.coin_balance,
         "wins": user.wins,
         "losses": user.losses,
-        "total_wagered_wei": user.total_wagered_wei,
+        "total_wagered": user.total_wagered,
         "created_at": user.created_at,
     }))
 }
@@ -41,16 +41,14 @@ pub async fn update_me(
             display_name = COALESCE($1, display_name),
             bio = COALESCE($2, bio),
             avatar_url = COALESCE($3, avatar_url),
-            wallet_address = COALESCE($4, wallet_address),
             updated_at = NOW()
-        WHERE id = $5
+        WHERE id = $4
         RETURNING *
         "#,
     )
     .bind(&body.display_name)
     .bind(&body.bio)
     .bind(&body.avatar_url)
-    .bind(&body.wallet_address)
     .bind(user.id)
     .fetch_one(&pool)
     .await

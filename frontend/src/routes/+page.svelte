@@ -1,25 +1,43 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { isAuthenticated } from '$lib/stores';
+  import { getFeed, getBets, getMe } from '$lib/api';
 
   let feedItems = $state<any[]>([]);
   let pendingBets = $state<any[]>([]);
+  let stats = $state<any>(null);
+  let loading = $state(true);
 
-  const demoFeed = [
-    { id: '1', type: 'settled', question: 'Lakers defeat Celtics on Mar 5', from: 'chad_bets', amount: 0.5, outcome: 'win', time: '12m ago' },
-    { id: '2', type: 'active', question: 'Will Bitcoin hit $150k by June 2026?', from: 'crypto_mike', amount: 1.0, outcome: null, time: '1h ago' },
-    { id: '3', type: 'settled', question: 'Nuggets win Western Conference', from: 'dub_nation', amount: 0.25, outcome: 'loss', time: '2h ago' },
-    { id: '4', type: 'settled', question: 'Fed raises rates in Q1', from: 'macro_trader', amount: 0.75, outcome: 'win', time: '5h ago' },
-  ];
-
-  const demoPending = [
-    { id: 'p1', question: 'Knicks beat 76ers tonight', from: 'hoops_fan', amount: 0.1, odds: '3:2', expires: '23h left' },
-    { id: 'p2', question: 'Trump wins 2028 GOP primary', from: 'poly_whale', amount: 0.5, odds: '1:1', expires: '2d left' },
-  ];
-
-  onMount(() => {
-    feedItems = demoFeed;
-    pendingBets = demoPending;
+  onMount(async () => {
+    if (!$isAuthenticated) {
+      loading = false;
+      return;
+    }
+    try {
+      const [feed, pending, me] = await Promise.all([
+        getFeed().catch(() => []),
+        getBets({ status: 'proposed', role: 'opponent' }).catch(() => []),
+        getMe().catch(() => null),
+      ]);
+      feedItems = feed;
+      pendingBets = pending;
+      stats = me;
+    } catch { /* ignore */ }
+    loading = false;
   });
+
+  function formatCoins(n: number): string {
+    return n?.toLocaleString() ?? '0';
+  }
+
+  function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
 </script>
 
 <svelte:head>
@@ -31,14 +49,21 @@
   <!-- Hero -->
   <section class="hero animate-in">
     <div class="hero-glow"></div>
-    <h1 class="hero-title">You're <span class="lime">12–8</span> this month</h1>
-    <div class="hero-stats">
-      <span><strong class="mono">2.45 ETH</strong> wagered</span>
-      <span class="sep">·</span>
-      <span><strong class="mono">3</strong> active bets</span>
-      <span class="sep">·</span>
-      <span class="streak">3W streak</span>
-    </div>
+    {#if stats}
+      <h1 class="hero-title">You're <span class="lime">{stats.wins}–{stats.losses}</span> this month</h1>
+      <div class="hero-stats">
+        <span><strong class="mono">{formatCoins(stats.coin_balance)}</strong> coins</span>
+        <span class="sep">·</span>
+        <span><strong class="mono">{formatCoins(stats.total_wagered)}</strong> wagered</span>
+        <span class="sep">·</span>
+        <span class="streak">{stats.wins > stats.losses ? `${stats.wins - stats.losses}W` : '—'}</span>
+      </div>
+    {:else}
+      <h1 class="hero-title">Welcome to <span class="lime">SideBet</span></h1>
+      <div class="hero-stats">
+        <span>Sign in to start betting with friends</span>
+      </div>
+    {/if}
   </section>
 
   <!-- Incoming Bets -->
@@ -57,14 +82,10 @@
           <a href="/bets/{bet.id}" class="bet-row accent-bar accent-bar--amber">
             <div class="bet-row-body">
               <span class="bet-q">{bet.question}</span>
-              <span class="bet-sub">from @{bet.from} · {bet.odds} · {bet.expires}</span>
+              <span class="bet-sub">{bet.odds_numerator}:{bet.odds_denominator} · expires {new Date(bet.expires_at).toLocaleDateString()}</span>
             </div>
             <div class="bet-row-right">
-              <span class="mono amt">{bet.amount} ETH</span>
-              <div class="bet-actions">
-                <button class="btn btn-accept btn-sm" onclick={(e) => e.stopPropagation()}>Accept</button>
-                <button class="btn btn-ghost btn-sm" onclick={(e) => e.stopPropagation()}>Decline</button>
-              </div>
+              <span class="mono amt">{formatCoins(bet.amount)} coins</span>
             </div>
           </a>
         {/each}
@@ -78,25 +99,27 @@
       <h2>Activity</h2>
     </div>
 
+    {#if feedItems.length === 0 && !loading}
+      <p class="empty-state">No activity yet. Add friends and place bets to see your feed!</p>
+    {/if}
+
     <div class="feed stagger">
       {#each feedItems as item}
         <div class="feed-row accent-bar"
-          class:accent-bar--lime={item.outcome === 'win'}
-          class:accent-bar--rose={item.outcome === 'loss'}
-          class:accent-bar--sky={item.outcome === null}
+          class:accent-bar--lime={item.payload?.outcome?.includes('win')}
+          class:accent-bar--rose={item.payload?.outcome?.includes('lose') || item.payload?.outcome?.includes('loss')}
+          class:accent-bar--sky={!item.payload?.outcome}
         >
           <div class="feed-body">
-            <span class="feed-q">{item.question}</span>
+            <span class="feed-q">{item.payload?.question || 'Bet update'}</span>
             <span class="feed-sub">
-              vs @{item.from} · {item.time}
+              {item.type} · {timeAgo(item.created_at)}
             </span>
           </div>
           <div class="feed-right">
-            <span class="mono amt">{item.amount} ETH</span>
-            {#if item.outcome === 'win'}
-              <span class="tag tag--win">Won</span>
-            {:else if item.outcome === 'loss'}
-              <span class="tag tag--loss">Lost</span>
+            <span class="mono amt">{formatCoins(item.payload?.amount || 0)} coins</span>
+            {#if item.payload?.status === 'settled'}
+              <span class="tag tag--win">Settled</span>
             {:else}
               <span class="tag tag--active">Active</span>
             {/if}
@@ -109,6 +132,12 @@
 
 <style>
   .dash { max-width: 760px; }
+
+  .empty-state {
+    color: var(--text-3);
+    font-size: 0.875rem;
+    padding: 20px 0;
+  }
 
   /* ── Hero ── */
   .hero {
@@ -217,11 +246,6 @@
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--text-1);
-  }
-
-  .bet-actions {
-    display: flex;
-    gap: 6px;
   }
 
   /* ── Feed ── */

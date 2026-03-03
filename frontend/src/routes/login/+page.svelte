@@ -1,8 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { user, isAuthenticated } from '$lib/stores';
+  import { user, isAuthenticated, coinBalance } from '$lib/stores';
+  import { signIn, signUp, getSession, getBalance } from '$lib/api';
 
-  let mode = $state<'login' | 'signup'>('login');
+  let mode = $state<'signin' | 'signup'>('signin');
   let email = $state('');
   let password = $state('');
   let name = $state('');
@@ -12,173 +13,161 @@
   async function handleSubmit() {
     error = '';
     loading = true;
+
     try {
-      // Placeholder — will call auth sidecar
-      await new Promise(r => setTimeout(r, 600));
-      user.set({ name: name || email.split('@')[0], email });
-      isAuthenticated.set(true);
-      goto('/');
+      if (mode === 'signup') {
+        if (!name.trim()) { error = 'Name is required'; loading = false; return; }
+        const res = await signUp(email, password, name);
+        if (res?.error) { error = res.error.message || 'Signup failed'; loading = false; return; }
+      } else {
+        const res = await signIn(email, password);
+        if (res?.error) { error = res.error.message || 'Invalid credentials'; loading = false; return; }
+      }
+
+      // Fetch session
+      const session = await getSession();
+      if (session?.user) {
+        user.set(session.user);
+        isAuthenticated.set(true);
+        try {
+          const wallet = await getBalance();
+          coinBalance.set(wallet.coin_balance);
+        } catch { /* ok */ }
+        goto('/');
+      } else {
+        error = 'Authentication failed. Please try again.';
+      }
     } catch (e: any) {
       error = e.message || 'Something went wrong';
-    } finally {
-      loading = false;
     }
+    loading = false;
   }
 </script>
 
-<svelte:head><title>SideBet — {mode === 'login' ? 'Sign In' : 'Sign Up'}</title></svelte:head>
+<svelte:head>
+  <title>Sign In — SideBet</title>
+</svelte:head>
 
-<div class="auth-page">
-  <div class="auth-left">
-    <div class="brand-content">
-      <span class="brand-mark">SIDEBET</span>
-      <h1 class="brand-tagline">Bet your friends.<br/>Settle on-chain.</h1>
-      <p class="brand-sub">Peer-to-peer wagers on NBA, politics, and anything else — trustlessly settled with UMA's oracle.</p>
-    </div>
-    <div class="brand-glow"></div>
-  </div>
+<div class="login-page">
+  <div class="login-card animate-in">
+    <div class="login-logo">SIDEBET</div>
+    <h1>{mode === 'signin' ? 'Welcome back' : 'Create account'}</h1>
+    <p class="sub">Bet on events with friends. Play with coins, not cash.</p>
 
-  <div class="auth-right">
-    <div class="auth-form-wrap">
-      <h2>{mode === 'login' ? 'Welcome back' : 'Create account'}</h2>
-
-      {#if error}
-        <div class="error-msg">{error}</div>
+    <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+      {#if mode === 'signup'}
+        <div class="form-group">
+          <label for="name">Name</label>
+          <input id="name" type="text" class="input" bind:value={name} placeholder="Your name" required />
+        </div>
       {/if}
 
-      <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
-        {#if mode === 'signup'}
-          <div class="field">
-            <label class="label" for="name">Name</label>
-            <input id="name" class="input" type="text" bind:value={name} placeholder="Your name" required />
-          </div>
-        {/if}
-
-        <div class="field">
-          <label class="label" for="email">Email</label>
-          <input id="email" class="input" type="email" bind:value={email} placeholder="you@example.com" required />
-        </div>
-
-        <div class="field">
-          <label class="label" for="pw">Password</label>
-          <input id="pw" class="input" type="password" bind:value={password} placeholder="••••••••" required minlength="8" />
-        </div>
-
-        <button class="btn btn-primary btn-lg full-w" type="submit" disabled={loading}>
-          {loading ? 'Loading…' : mode === 'login' ? 'Sign In' : 'Create Account'}
-        </button>
-      </form>
-
-      <div class="toggle-mode">
-        {#if mode === 'login'}
-          Don't have an account? <button class="link-btn" onclick={() => mode = 'signup'}>Sign up</button>
-        {:else}
-          Already have an account? <button class="link-btn" onclick={() => mode = 'login'}>Sign in</button>
-        {/if}
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input id="email" type="email" class="input" bind:value={email} placeholder="you@example.com" required />
       </div>
-    </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" class="input" bind:value={password} placeholder="••••••••" required minlength="8" />
+      </div>
+
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
+
+      <button type="submit" class="btn btn-primary btn-full" disabled={loading}>
+        {loading ? 'Working…' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
+      </button>
+    </form>
+
+    <p class="toggle">
+      {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
+      <button class="link-btn" onclick={() => { mode = mode === 'signin' ? 'signup' : 'signin'; error = ''; }}>
+        {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+      </button>
+    </p>
   </div>
 </div>
 
 <style>
-  .auth-page {
-    display: flex;
-    min-height: calc(100vh - var(--nav-height) - 72px);
-    margin: -36px -24px;
-  }
-
-  /* ── Left: Brand ── */
-  .auth-left {
-    flex: 1;
+  .login-page {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    overflow: hidden;
-    padding: 48px;
+    min-height: calc(100vh - var(--nav-height) - 100px);
   }
 
-  .brand-content { position: relative; z-index: 1; max-width: 400px; }
-  .brand-mark {
+  .login-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 40px 32px;
+    text-align: center;
+  }
+
+  .login-logo {
     font-family: var(--font-display);
     font-size: 0.875rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     color: var(--lime);
     margin-bottom: 20px;
-    display: block;
-  }
-  .brand-tagline {
-    font-size: 2.5rem;
-    font-weight: 700;
-    line-height: 1.1;
-    margin-bottom: 16px;
-  }
-  .brand-sub {
-    font-size: 0.9375rem;
-    color: var(--text-2);
-    line-height: 1.5;
   }
 
-  .brand-glow {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(ellipse, rgba(200,255,0,0.04) 0%, transparent 70%);
-    pointer-events: none;
+  h1 {
+    font-size: 1.375rem;
+    margin-bottom: 6px;
   }
 
-  /* ── Right: Form ── */
-  .auth-right {
-    width: 420px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 48px;
-    border-left: 1px solid var(--border);
-  }
-
-  .auth-form-wrap { width: 100%; max-width: 320px; }
-  .auth-form-wrap h2 { margin-bottom: 28px; }
-
-  .field { margin-bottom: 18px; }
-  .full-w { width: 100%; }
-
-  .error-msg {
-    background: var(--rose-dim);
-    color: var(--rose);
-    padding: 8px 12px;
-    border-radius: var(--r-md);
-    font-size: 0.8125rem;
-    margin-bottom: 16px;
-  }
-
-  .toggle-mode {
-    margin-top: 20px;
+  .sub {
     font-size: 0.8125rem;
     color: var(--text-3);
+    margin-bottom: 28px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+    text-align: left;
+  }
+  .form-group label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .btn-full {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .error {
+    color: var(--rose);
+    font-size: 0.8125rem;
+    margin-bottom: 12px;
     text-align: center;
   }
 
+  .toggle {
+    margin-top: 20px;
+    font-size: 0.8125rem;
+    color: var(--text-3);
+  }
   .link-btn {
     background: none;
     border: none;
     color: var(--lime);
-    font-family: var(--font-display);
-    font-weight: 600;
     cursor: pointer;
+    font-weight: 600;
     font-size: 0.8125rem;
+    text-decoration: underline;
+    padding: 0;
   }
   .link-btn:hover { color: var(--lime-hover); }
-
-  @media (max-width: 768px) {
-    .auth-page { flex-direction: column; }
-    .auth-left { padding: 32px 24px; }
-    .auth-right { width: 100%; border-left: none; border-top: 1px solid var(--border); padding: 32px 24px; }
-    .brand-tagline { font-size: 1.75rem; }
-  }
 </style>
