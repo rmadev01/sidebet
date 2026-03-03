@@ -74,13 +74,17 @@ pub async fn fetch_polymarket_price(token_id: &str) -> Result<f64, OddsError> {
 
 /// Convert Polymarket price (0-1 probability) to decimal odds
 pub fn probability_to_decimal_odds(prob: f64) -> f64 {
-    if prob <= 0.0 { return 100.0; }
+    if prob <= 0.0 {
+        return 100.0;
+    }
     1.0 / prob
 }
 
 /// Convert decimal odds to implied probability
 pub fn decimal_odds_to_probability(odds: f64) -> f64 {
-    if odds <= 0.0 { return 0.0; }
+    if odds <= 0.0 {
+        return 0.0;
+    }
     1.0 / odds
 }
 

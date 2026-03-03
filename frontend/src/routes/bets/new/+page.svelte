@@ -1,352 +1,398 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { isAuthenticated, coinBalance } from '$lib/stores';
+  import { getFriends, getEvents, createBet } from '$lib/api';
+
   let step = $state(1);
-  let betType = $state<'event' | 'custom'>('event');
-  let question = $state('');
-  let creatorPosition = $state('');
-  let opponentPosition = $state('');
-  let amountEth = $state('0.1');
-  let oddsNumerator = $state(1);
-  let oddsDenominator = $state(1);
-  let selectedFriend = $state('');
-  let expiresHours = $state(24);
+  let friends = $state<any[]>([]);
+  let events = $state<any[]>([]);
+  let loading = $state(true);
+  let submitting = $state(false);
+  let error = $state('');
 
-  const friends = [
-    { id: 'f1', username: 'chad_bets', name: 'Chad', wins: 15, losses: 8, av: 1 },
-    { id: 'f2', username: 'crypto_mike', name: 'Mike', wins: 22, losses: 12, av: 2 },
-    { id: 'f3', username: 'hoops_fan', name: 'Sarah', wins: 9, losses: 5, av: 3 },
-    { id: 'f4', username: 'poly_whale', name: 'Alex', wins: 18, losses: 14, av: 4 },
-  ];
+  let form = $state({
+    opponent_id: '',
+    event_id: '',
+    question: '',
+    creator_position: '',
+    opponent_position: '',
+    amount: 50,
+    odds_numerator: 1,
+    odds_denominator: 1,
+    reference_odds: null as any,
+    expires_in_hours: 24,
+  });
 
-  function impliedProb(n: number, d: number) {
-    return ((d / (n + d)) * 100).toFixed(1) + '%';
+  let selectedFriend = $state<any>(null);
+  let selectedEvent = $state<any>(null);
+
+  onMount(async () => {
+    if (!$isAuthenticated) { loading = false; return; }
+    try {
+      const [f, e] = await Promise.all([
+        getFriends().catch(() => []),
+        getEvents().catch(() => []),
+      ]);
+      friends = f;
+      events = e;
+    } catch { /* ignore */ }
+    loading = false;
+  });
+
+  function selectFriend(f: any) {
+    selectedFriend = f;
+    form.opponent_id = f.id;
+  }
+
+  function selectEvent(e: any) {
+    selectedEvent = e;
+    form.event_id = e.id;
+    form.question = e.title;
+    if (e.cached_odds && typeof e.cached_odds === 'object') {
+      form.reference_odds = e.cached_odds;
+    }
+  }
+
+  async function submit() {
+    if (submitting) return;
+    error = '';
+
+    if (!form.opponent_id) { error = 'Select an opponent'; return; }
+    if (!form.event_id) { error = 'Select an event'; return; }
+    if (!form.creator_position) { error = 'Define your position'; return; }
+    if (form.amount <= 0) { error = 'Amount must be positive'; return; }
+    if (form.amount > $coinBalance) { error = 'Insufficient coins'; return; }
+
+    submitting = true;
+    try {
+      const bet = await createBet({
+        ...form,
+        opponent_position: form.opponent_position || `Not: ${form.creator_position}`,
+      });
+      coinBalance.update(b => b - form.amount);
+      goto(`/bets/${bet.id}`);
+    } catch (e: any) {
+      error = e.message || 'Failed to create bet';
+      submitting = false;
+    }
   }
 </script>
 
 <svelte:head>
-  <title>SideBet — New Bet</title>
+  <title>New Bet — SideBet</title>
 </svelte:head>
 
-<div class="create">
-  <h1 class="animate-in">Create a Bet</h1>
-  <p class="subtitle animate-in" style="animation-delay:40ms">Challenge a friend to a wager</p>
+<div class="new-bet">
+  <h1>Create a Bet</h1>
 
-  <!-- Step indicator — fading numbers -->
-  <div class="step-row animate-in" style="animation-delay:60ms">
-    <div class="step-item" class:active={step >= 1} class:done={step > 1}><span class="step-n">{step > 1 ? '✓' : '1'}</span> Question</div>
-    <div class="step-line" class:done={step > 1}></div>
-    <div class="step-item" class:active={step >= 2} class:done={step > 2}><span class="step-n">{step > 2 ? '✓' : '2'}</span> Terms</div>
-    <div class="step-line" class:done={step > 2}></div>
-    <div class="step-item" class:active={step >= 3}><span class="step-n">3</span> Send</div>
+  <!-- Progress -->
+  <div class="progress">
+    {#each [1,2,3,4] as s}
+      <div class="prog-dot" class:active={step >= s} class:current={step === s}></div>
+      {#if s < 4}<div class="prog-line" class:active={step > s}></div>{/if}
+    {/each}
   </div>
 
-  <div class="form-area animate-in" style="animation-delay:100ms">
-    {#if step === 1}
-      <!-- Step 1: Question -->
-      <div class="form-card">
-        <div class="field">
-          <label class="label">Bet Type</label>
-          <div class="type-toggle">
-            <button class="type-btn" class:active={betType === 'event'} onclick={() => betType = 'event'}>From an Event</button>
-            <button class="type-btn" class:active={betType === 'custom'} onclick={() => betType = 'custom'}>Custom</button>
+  <!-- Step 1: Select Opponent -->
+  {#if step === 1}
+    <div class="step-card animate-in">
+      <h2>Who are you betting?</h2>
+      {#if friends.length === 0}
+        <p class="note">No friends yet. <a href="/friends">Add some first!</a></p>
+      {:else}
+        <div class="friend-grid">
+          {#each friends as f}
+            <button class="friend-option" class:selected={form.opponent_id === f.id} onclick={() => selectFriend(f)}>
+              <span class="av av-1">{f.display_name?.[0]?.toUpperCase() || '?'}</span>
+              <span class="f-name">{f.display_name || f.username}</span>
+              <span class="f-handle">@{f.username}</span>
+            </button>
+          {/each}
+        </div>
+        <button class="btn btn-primary" disabled={!form.opponent_id} onclick={() => step = 2}>Continue →</button>
+      {/if}
+    </div>
+
+  <!-- Step 2: Select Event -->
+  {:else if step === 2}
+    <div class="step-card animate-in">
+      <h2>What event?</h2>
+      {#if events.length === 0}
+        <p class="note">No events available right now. Check back later!</p>
+      {:else}
+        <div class="event-list">
+          {#each events as e}
+            <button class="event-option" class:selected={form.event_id === e.id} onclick={() => selectEvent(e)}>
+              <span class="ev-cat">{e.category}</span>
+              <span class="ev-title">{e.title}</span>
+              {#if e.starts_at}
+                <span class="ev-time">{new Date(e.starts_at).toLocaleDateString()}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+        <div class="step-actions">
+          <button class="btn btn-ghost" onclick={() => step = 1}>← Back</button>
+          <button class="btn btn-primary" disabled={!form.event_id} onclick={() => step = 3}>Continue →</button>
+        </div>
+      {/if}
+    </div>
+
+  <!-- Step 3: Bet Details -->
+  {:else if step === 3}
+    <div class="step-card animate-in">
+      <h2>Bet details</h2>
+      <div class="form-group">
+        <label>Your position</label>
+        <input bind:value={form.creator_position} placeholder="e.g. Lakers win" class="input" />
+      </div>
+      <div class="form-group">
+        <label>Opponent's position</label>
+        <input bind:value={form.opponent_position} placeholder="e.g. Celtics win" class="input" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Amount (coins)</label>
+          <input type="number" bind:value={form.amount} min="1" max={$coinBalance} class="input" />
+          <span class="hint">Balance: {$coinBalance.toLocaleString()} coins</span>
+        </div>
+        <div class="form-group">
+          <label>Odds</label>
+          <div class="odds-input">
+            <input type="number" bind:value={form.odds_numerator} min="1" max="100" class="input" />
+            <span>:</span>
+            <input type="number" bind:value={form.odds_denominator} min="1" max="100" class="input" />
           </div>
         </div>
+      </div>
+      <div class="step-actions">
+        <button class="btn btn-ghost" onclick={() => step = 2}>← Back</button>
+        <button class="btn btn-primary" disabled={!form.creator_position} onclick={() => step = 4}>Review →</button>
+      </div>
+    </div>
 
-        <div class="field">
-          <label class="label" for="q">Question / Assertion</label>
-          <textarea id="q" class="input" bind:value={question} placeholder="e.g. The Lakers will defeat the Celtics on March 5, 2026."></textarea>
-          <span class="hint">This will be the UMA assertion claim. Be specific.</span>
+  <!-- Step 4: Review & Submit -->
+  {:else if step === 4}
+    <div class="step-card animate-in">
+      <h2>Review your bet</h2>
+      <div class="review-card">
+        <div class="review-row">
+          <span class="review-label">Opponent</span>
+          <span class="review-val">{selectedFriend?.display_name || selectedFriend?.username}</span>
         </div>
-
-        <div class="field-row">
-          <div class="field">
-            <label class="label" for="yp">Your Position</label>
-            <input id="yp" class="input" bind:value={creatorPosition} placeholder="e.g. Lakers win" />
-          </div>
-          <div class="field">
-            <label class="label" for="tp">Their Position</label>
-            <input id="tp" class="input" bind:value={opponentPosition} placeholder="e.g. Celtics win" />
-          </div>
+        <div class="review-row">
+          <span class="review-label">Event</span>
+          <span class="review-val">{selectedEvent?.title}</span>
         </div>
+        <div class="review-row">
+          <span class="review-label">Your pick</span>
+          <span class="review-val">{form.creator_position}</span>
+        </div>
+        <div class="review-row">
+          <span class="review-label">Their pick</span>
+          <span class="review-val">{form.opponent_position || `Not: ${form.creator_position}`}</span>
+        </div>
+        <div class="review-row">
+          <span class="review-label">Amount</span>
+          <span class="review-val mono">{form.amount.toLocaleString()} coins</span>
+        </div>
+        <div class="review-row">
+          <span class="review-label">Odds</span>
+          <span class="review-val mono">{form.odds_numerator}:{form.odds_denominator}</span>
+        </div>
+      </div>
 
-        <button class="btn btn-primary btn-lg full-w" onclick={() => step = 2} disabled={!question || !creatorPosition || !opponentPosition}>
-          Continue
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
+
+      <div class="step-actions">
+        <button class="btn btn-ghost" onclick={() => step = 3}>← Back</button>
+        <button class="btn btn-primary" onclick={submit} disabled={submitting}>
+          {submitting ? 'Sending…' : 'Send Bet'}
         </button>
       </div>
-
-    {:else if step === 2}
-      <!-- Step 2: Terms & Odds -->
-      <div class="terms-grid">
-        <div class="form-card">
-          <div class="field-row">
-            <div class="field">
-              <label class="label" for="amt">Wager (ETH)</label>
-              <input id="amt" class="input" type="number" step="0.001" min="0.001" bind:value={amountEth} />
-            </div>
-            <div class="field">
-              <label class="label" for="exp">Expires in (hours)</label>
-              <input id="exp" class="input" type="number" min="1" max="168" bind:value={expiresHours} />
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label">Your Odds</label>
-            <div class="odds-row">
-              <input class="input odds-in" type="number" min="1" bind:value={oddsNumerator} />
-              <span class="odds-colon">:</span>
-              <input class="input odds-in" type="number" min="1" bind:value={oddsDenominator} />
-            </div>
-            <span class="hint">Implied probability: {impliedProb(oddsNumerator, oddsDenominator)}</span>
-          </div>
-
-          <div class="btns-row">
-            <button class="btn btn-ghost" onclick={() => step = 1}>Back</button>
-            <button class="btn btn-primary btn-lg" style="flex:1" onclick={() => step = 3}>Choose Opponent</button>
-          </div>
-        </div>
-
-        <!-- Odds comparison -->
-        <div class="odds-panel">
-          <h4>Reference Odds</h4>
-          <div class="ref-item"><span class="ref-label">Sportsbook Avg</span><span class="mono ref-val">1.82</span></div>
-          <div class="ref-item"><span class="ref-label">Polymarket</span><span class="mono ref-val">1.91</span></div>
-          <div class="ref-item ref-yours"><span class="ref-label">Your odds</span><span class="mono ref-val">{((oddsNumerator + oddsDenominator) / oddsDenominator).toFixed(2)}</span></div>
-          <div class="ref-delta">
-            <span>Delta from market</span>
-            <span class="mono" style="color:var(--amber)">+8.2%</span>
-          </div>
-        </div>
-      </div>
-
-    {:else}
-      <!-- Step 3: Select Opponent -->
-      <div class="form-card">
-        <div class="field">
-          <label class="label">Select Opponent</label>
-          <div class="friend-scroll">
-            {#each friends as f}
-              <button class="f-chip" class:selected={selectedFriend === f.id} onclick={() => selectedFriend = f.id}>
-                <div class="av av-{f.av}">{f.name[0]}</div>
-                <span class="f-name">@{f.username}</span>
-                <span class="f-record">{f.wins}W–{f.losses}L</span>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Receipt-style summary -->
-        <div class="receipt">
-          <div class="receipt-title">Summary</div>
-          <div class="receipt-row"><span>Question</span><span class="receipt-val">{question.length > 40 ? question.slice(0, 40) + '…' : question}</span></div>
-          <div class="receipt-row"><span>Your pick</span><span class="receipt-val">{creatorPosition}</span></div>
-          <div class="receipt-row"><span>Amount</span><span class="receipt-val mono">{amountEth} ETH</span></div>
-          <div class="receipt-row"><span>Odds</span><span class="receipt-val">{oddsNumerator}:{oddsDenominator}</span></div>
-          <div class="receipt-row"><span>Expires</span><span class="receipt-val">{expiresHours}h</span></div>
-        </div>
-
-        <div class="btns-row">
-          <button class="btn btn-ghost" onclick={() => step = 2}>Back</button>
-          <button class="btn btn-primary btn-lg" style="flex:1" disabled={!selectedFriend}>Send Bet</button>
-        </div>
-      </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
-  .create { max-width: 860px; }
-  .create h1 { margin-bottom: 4px; }
-  .subtitle { color: var(--text-2); font-size: 0.9375rem; margin-bottom: 28px; }
+  .new-bet { max-width: 580px; }
 
-  /* ── Steps ── */
-  .step-row {
+  h1 { font-size: 1.5rem; margin-bottom: 24px; }
+
+  /* Progress */
+  .progress {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 0;
     margin-bottom: 32px;
   }
-  .step-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-display);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--text-3);
-    transition: color var(--dur-base);
-  }
-  .step-item.active { color: var(--text-1); }
-  .step-n {
-    width: 24px;
-    height: 24px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  .prog-dot {
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    font-size: 0.6875rem;
-    font-weight: 700;
     background: var(--bg-raised);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
+    transition: all var(--dur-base) var(--ease-out);
   }
-  .step-item.active .step-n {
+  .prog-dot.active {
     background: var(--lime);
     border-color: var(--lime);
-    color: var(--bg-root);
   }
-  .step-item.done .step-n {
-    background: var(--lime-dim);
-    border-color: var(--lime);
-    color: var(--lime);
+  .prog-dot.current {
+    box-shadow: 0 0 0 3px var(--lime-dim);
   }
-  .step-line {
-    width: 48px;
-    height: 1px;
+  .prog-line {
+    flex: 1;
+    height: 2px;
     background: var(--border);
-    margin: 0 8px;
+    transition: background var(--dur-base) var(--ease-out);
   }
-  .step-line.done { background: var(--lime); }
+  .prog-line.active { background: var(--lime); }
 
-  /* ── Form Card ── */
-  .form-card {
+  .step-card {
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--r-lg);
     padding: 28px;
-    max-width: 560px;
-    margin: 0 auto;
+  }
+  .step-card h2 {
+    font-size: 1.125rem;
+    margin-bottom: 20px;
   }
 
-  .field { margin-bottom: 20px; }
-  .field-row { display: flex; gap: 14px; margin-bottom: 20px; }
-  .field-row .field { flex: 1; margin-bottom: 0; }
-  .hint { font-size: 0.6875rem; color: var(--text-3); margin-top: 4px; display: block; }
-  .full-w { width: 100%; }
-
-  .type-toggle { display: flex; gap: 6px; }
-  .type-btn {
-    flex: 1;
-    padding: 10px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
+  .note {
     color: var(--text-3);
-    font-family: var(--font-display);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--dur-fast);
+    font-size: 0.875rem;
   }
-  .type-btn.active {
-    border-color: var(--lime);
-    background: var(--lime-dim);
-    color: var(--text-1);
-  }
+  .note a { color: var(--lime); text-decoration: underline; }
 
-  .odds-row { display: flex; align-items: center; gap: 8px; }
-  .odds-in { width: 72px; text-align: center; }
-  .odds-colon { font-size: 1.125rem; font-weight: 800; color: var(--text-3); }
-
-  .btns-row { display: flex; gap: 10px; margin-top: 24px; }
-
-  /* ── Terms Grid ── */
-  .terms-grid {
-    display: flex;
-    gap: 20px;
-    align-items: flex-start;
-  }
-  .terms-grid .form-card { flex: 1; max-width: none; }
-
-  /* ── Odds Panel ── */
-  .odds-panel {
-    width: 240px;
-    flex-shrink: 0;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 20px;
-    position: sticky;
-    top: calc(var(--nav-height) + 16px);
-  }
-  .odds-panel h4 { margin-bottom: 14px; font-size: 0.875rem; }
-  .ref-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.8125rem;
-  }
-  .ref-label { color: var(--text-3); }
-  .ref-val { font-weight: 600; font-size: 0.8125rem; }
-  .ref-yours { color: var(--lime); }
-  .ref-delta {
-    display: flex;
-    justify-content: space-between;
-    padding-top: 10px;
-    font-size: 0.8125rem;
-    color: var(--text-3);
-  }
-
-  /* ── Friend Selector ── */
-  .friend-scroll {
-    display: flex;
+  /* Friends Grid */
+  .friend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 8px;
-    overflow-x: auto;
-    padding: 4px 0;
-    -webkit-overflow-scrolling: touch;
+    margin-bottom: 20px;
   }
-  .f-chip {
+  .friend-option {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    padding: 14px 16px;
-    background: var(--bg-input);
+    padding: 16px 8px;
     border: 1px solid var(--border);
-    border-radius: var(--r-lg);
+    border-radius: var(--r-md);
+    background: var(--bg-surface);
+    color: var(--text-2);
     cursor: pointer;
-    transition: all var(--dur-fast);
-    flex-shrink: 0;
-    min-width: 100px;
-    font-family: var(--font-body);
+    transition: all var(--dur-fast) var(--ease-out);
   }
-  .f-chip:hover { border-color: var(--border-strong); }
-  .f-chip.selected {
+  .friend-option:hover { border-color: var(--text-3); }
+  .friend-option.selected {
     border-color: var(--lime);
     background: var(--lime-dim);
+    color: var(--text-1);
   }
-  .f-name { font-size: 0.75rem; font-weight: 600; color: var(--text-1); }
-  .f-record { font-size: 0.6875rem; color: var(--text-3); }
+  .f-name { font-weight: 600; font-size: 0.8125rem; }
+  .f-handle { font-size: 0.6875rem; color: var(--text-3); }
 
-  /* ── Receipt Summary ── */
-  .receipt {
-    margin-top: 20px;
-    border: 1px dashed var(--border-strong);
-    border-radius: var(--r-md);
-    padding: 16px;
+  /* Events */
+  .event-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 20px;
   }
-  .receipt-title {
-    font-family: var(--font-display);
+  .event-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--bg-surface);
+    color: var(--text-2);
+    cursor: pointer;
+    text-align: left;
+    transition: all var(--dur-fast) var(--ease-out);
+  }
+  .event-option:hover { border-color: var(--text-3); }
+  .event-option.selected {
+    border-color: var(--lime);
+    background: var(--lime-dim);
+    color: var(--text-1);
+  }
+  .ev-cat {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--sky);
+    min-width: 56px;
+  }
+  .ev-title { flex: 1; font-weight: 500; font-size: 0.875rem; }
+  .ev-time { font-size: 0.75rem; color: var(--text-3); }
+
+  /* Form */
+  .form-group {
+    margin-bottom: 16px;
+  }
+  .form-group label {
+    display: block;
     font-size: 0.75rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
     color: var(--text-3);
-    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
   }
-  .receipt-row {
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .hint {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    margin-top: 4px;
+    display: block;
+    font-family: var(--font-mono);
+  }
+  .odds-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .odds-input .input { width: 64px; text-align: center; }
+
+  /* Review */
+  .review-card {
+    background: var(--bg-raised);
+    border-radius: var(--r-md);
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .review-row {
     display: flex;
     justify-content: space-between;
-    padding: 4px 0;
-    font-size: 0.8125rem;
-    color: var(--text-2);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
   }
-  .receipt-val { color: var(--text-1); font-weight: 500; }
+  .review-row:last-child { border-bottom: none; }
+  .review-label { color: var(--text-3); }
+  .review-val { font-weight: 600; color: var(--text-1); }
 
-  @media (max-width: 720px) {
-    .terms-grid { flex-direction: column; }
-    .odds-panel { width: 100%; position: static; }
-    .field-row { flex-direction: column; }
-    .friend-scroll { flex-wrap: wrap; }
-    .f-chip { min-width: 0; flex: 1; }
+  .step-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
+
+  .error {
+    color: var(--rose);
+    font-size: 0.875rem;
+    margin-top: 12px;
   }
 </style>

@@ -1,94 +1,170 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { page } from '$app/stores';
+  import { isAuthenticated, user, coinBalance } from '$lib/stores';
+  import { getBet, acceptBet, declineBet, cancelBet, settleBet, getUser } from '$lib/api';
 
-  const bet = {
-    id: $page.params.id,
-    question: 'Lakers defeat Celtics on Mar 5',
-    creator_position: 'Lakers win',
-    opponent_position: 'Celtics win',
-    amount: 0.5,
-    odds: '3:2',
-    status: 'active',
-    creator: { username: 'you', name: 'You', av: 1 },
-    opponent: { username: 'chad_bets', name: 'Chad', av: 2 },
-    created_at: '2026-03-01',
-    expires_at: '2026-03-04',
-    on_chain_id: null as string | null,
-    timeline: [
-      { label: 'Created', date: 'Mar 1, 2:15 PM', done: true },
-      { label: 'Accepted', date: 'Mar 1, 3:42 PM', done: true },
-      { label: 'Settling', date: '—', done: false },
-      { label: 'Settled', date: '—', done: false },
-    ],
-  };
+  let bet = $state<any>(null);
+  let creator = $state<any>(null);
+  let opponent = $state<any>(null);
+  let loading = $state(true);
+  let acting = $state(false);
+  let error = $state('');
+
+  $effect(() => {
+    load();
+  });
+
+  async function load() {
+    loading = true;
+    try {
+      bet = await getBet($page.params.id);
+      // Fetch user details in parallel — these are UUIDs so use the bet data
+    } catch (e: any) {
+      error = e.message;
+    }
+    loading = false;
+  }
+
+  function formatCoins(n: number) { return n?.toLocaleString() ?? '0'; }
+  function isCreator() { return bet?.creator_id === $user?.id; }
+  function isOpponent() { return bet?.opponent_id === $user?.id; }
+
+  async function doAccept() {
+    acting = true;
+    error = '';
+    try {
+      bet = await acceptBet(bet.id);
+      coinBalance.update(b => b - bet.amount);
+    } catch (e: any) { error = e.message; }
+    acting = false;
+  }
+
+  async function doDecline() {
+    acting = true;
+    error = '';
+    try {
+      await declineBet(bet.id);
+      bet.status = 'declined';
+    } catch (e: any) { error = e.message; }
+    acting = false;
+  }
+
+  async function doCancel() {
+    acting = true;
+    error = '';
+    try {
+      await cancelBet(bet.id);
+      bet.status = 'cancelled';
+      coinBalance.update(b => b + bet.amount);
+    } catch (e: any) { error = e.message; }
+    acting = false;
+  }
+
+  async function doSettle(winner: string) {
+    acting = true;
+    error = '';
+    try {
+      bet = await settleBet(bet.id, winner);
+    } catch (e: any) { error = e.message; }
+    acting = false;
+  }
 </script>
 
-<svelte:head><title>SideBet — Bet Detail</title></svelte:head>
+<svelte:head>
+  <title>Bet Details — SideBet</title>
+</svelte:head>
 
-<div class="detail">
-  <a href="/bets" class="back-link animate-in">← Back to bets</a>
+<div class="bet-detail">
+  {#if loading}
+    <p class="empty-state">Loading…</p>
+  {:else if !bet}
+    <p class="empty-state">Bet not found.</p>
+  {:else}
+    <a href="/bets" class="back-link">← All Bets</a>
 
-  <div class="detail-card animate-in" style="animation-delay:60ms">
-    <h2>{bet.question}</h2>
-
-    <!-- Matchup -->
-    <div class="matchup">
-      <div class="side">
-        <div class="av av-{bet.creator.av}">{bet.creator.name[0]}</div>
-        <span class="side-name">@{bet.creator.username}</span>
-        <span class="side-pos">{bet.creator_position}</span>
+    <div class="detail-card">
+      <!-- Status Badge -->
+      <div class="status-row">
+        <span class="status-badge"
+          class:status--active={bet.status === 'active'}
+          class:status--proposed={bet.status === 'proposed'}
+          class:status--settled={bet.status === 'settled'}
+          class:status--cancelled={bet.status === 'cancelled' || bet.status === 'declined'}
+        >{bet.status.toUpperCase()}</span>
+        <span class="mono text-3">{new Date(bet.created_at).toLocaleDateString()}</span>
       </div>
-      <span class="vs-mark">VS</span>
-      <div class="side">
-        <div class="av av-{bet.opponent.av}">{bet.opponent.name[0]}</div>
-        <span class="side-name">@{bet.opponent.username}</span>
-        <span class="side-pos">{bet.opponent_position}</span>
-      </div>
-    </div>
 
-    <!-- Details Row -->
-    <div class="detail-row">
-      <div class="d-item"><span class="d-label">Wager</span><span class="d-val mono">{bet.amount} ETH</span></div>
-      <div class="d-item"><span class="d-label">Odds</span><span class="d-val">{bet.odds}</span></div>
-      <div class="d-item"><span class="d-label">Expires</span><span class="d-val">{bet.expires_at}</span></div>
-      <div class="d-item"><span class="d-label">Chain ID</span><span class="d-val mono">{bet.on_chain_id || '—'}</span></div>
-    </div>
+      <h1 class="bet-question">{bet.question}</h1>
 
-    <!-- Timeline -->
-    <div class="timeline">
-      {#each bet.timeline as step, i}
-        <div class="tl-step" class:done={step.done} class:last={i === bet.timeline.length - 1}>
-          <div class="tl-dot"></div>
-          <div class="tl-content">
-            <span class="tl-label">{step.label}</span>
-            <span class="tl-date">{step.date}</span>
-          </div>
+      <!-- Positions -->
+      <div class="positions">
+        <div class="pos-card" class:winner={bet.winner_id === bet.creator_id}>
+          <span class="pos-label">Creator</span>
+          <span class="pos-pick">{bet.creator_position}</span>
+          {#if bet.winner_id === bet.creator_id}<span class="winner-badge">🏆 Winner</span>{/if}
         </div>
-      {/each}
-    </div>
+        <div class="pos-vs">vs</div>
+        <div class="pos-card" class:winner={bet.winner_id === bet.opponent_id}>
+          <span class="pos-label">Opponent</span>
+          <span class="pos-pick">{bet.opponent_position}</span>
+          {#if bet.winner_id === bet.opponent_id}<span class="winner-badge">🏆 Winner</span>{/if}
+        </div>
+      </div>
 
-    <!-- Actions -->
-    {#if bet.status === 'proposed'}
-      <div class="actions">
-        <button class="btn btn-accept btn-lg" style="flex:1">Accept Bet</button>
-        <button class="btn btn-danger btn-lg">Decline</button>
+      <!-- Details -->
+      <div class="detail-grid">
+        <div class="detail-item">
+          <span class="detail-label">Wager</span>
+          <span class="detail-val mono">{formatCoins(bet.amount)} coins</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Odds</span>
+          <span class="detail-val mono">{bet.odds_numerator}:{bet.odds_denominator}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Expires</span>
+          <span class="detail-val">{new Date(bet.expires_at).toLocaleDateString()}</span>
+        </div>
+        {#if bet.resolved_at}
+          <div class="detail-item">
+            <span class="detail-label">Settled</span>
+            <span class="detail-val">{new Date(bet.resolved_at).toLocaleDateString()}</span>
+          </div>
+        {/if}
       </div>
-    {:else if bet.status === 'active'}
+
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
+
+      <!-- Actions -->
       <div class="actions">
-        <button class="btn btn-primary btn-lg" style="flex:1">Trigger Settlement</button>
+        {#if bet.status === 'proposed' && isOpponent()}
+          <button class="btn btn-primary" onclick={doAccept} disabled={acting}>Accept</button>
+          <button class="btn btn-ghost" onclick={doDecline} disabled={acting}>Decline</button>
+        {/if}
+        {#if bet.status === 'proposed' && isCreator()}
+          <button class="btn btn-ghost" onclick={doCancel} disabled={acting}>Cancel</button>
+        {/if}
+        {#if bet.status === 'active' && (isCreator() || isOpponent())}
+          <span class="settle-label">Settle as:</span>
+          <button class="btn btn-primary" onclick={() => doSettle('creator')} disabled={acting}>Creator Wins</button>
+          <button class="btn btn-ghost" onclick={() => doSettle('opponent')} disabled={acting}>Opponent Wins</button>
+        {/if}
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
-  .detail { max-width: 620px; }
+  .bet-detail { max-width: 640px; }
 
   .back-link {
     display: inline-block;
-    font-size: 0.8125rem;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
     color: var(--text-3);
-    margin-bottom: 20px;
     text-decoration: none;
   }
   .back-link:hover { color: var(--text-2); }
@@ -96,102 +172,120 @@
   .detail-card {
     background: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: var(--r-xl);
+    border-radius: var(--r-lg);
     padding: 32px;
   }
 
-  .detail-card h2 { margin-bottom: 28px; }
-
-  /* ── Matchup ── */
-  .matchup {
+  .status-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 32px;
-    margin-bottom: 28px;
+    justify-content: space-between;
+    margin-bottom: 20px;
   }
-  .side {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    text-align: center;
-  }
-  .side-name { font-weight: 600; font-size: 0.875rem; }
-  .side-pos { font-size: 0.75rem; color: var(--text-3); }
-  .vs-mark {
-    font-family: var(--font-display);
+  .status-badge {
     font-size: 0.6875rem;
     font-weight: 700;
-    color: var(--text-3);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+  }
+  .status--active { background: var(--sky-dim); color: var(--sky); }
+  .status--proposed { background: var(--amber-dim); color: var(--amber); }
+  .status--settled { background: var(--lime-dim); color: var(--lime); }
+  .status--cancelled { background: var(--bg-raised); color: var(--text-3); }
+
+  .bet-question {
+    font-size: 1.375rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    line-height: 1.3;
   }
 
-  /* ── Detail Row ── */
-  .detail-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 28px;
+  .positions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
   }
-  .d-item {
-    padding: 12px;
+  .pos-card {
+    flex: 1;
+    background: var(--bg-raised);
+    border-radius: var(--r-md);
+    padding: 16px;
+    text-align: center;
+    border: 2px solid transparent;
+  }
+  .pos-card.winner { border-color: var(--lime); }
+  .pos-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 6px;
+  }
+  .pos-pick {
+    display: block;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-1);
+  }
+  .pos-vs {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    font-weight: 700;
+  }
+  .winner-badge {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--lime);
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 16px;
     background: var(--bg-raised);
     border-radius: var(--r-md);
   }
-  .d-label {
+  .detail-item { text-align: center; }
+  .detail-label {
     display: block;
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
     color: var(--text-3);
     margin-bottom: 4px;
-    font-family: var(--font-display);
   }
-  .d-val { font-weight: 700; font-size: 0.875rem; }
+  .detail-val {
+    font-weight: 700;
+    font-size: 0.9375rem;
+    color: var(--text-1);
+  }
 
-  /* ── Timeline ── */
-  .timeline {
-    margin-bottom: 24px;
-    padding-left: 8px;
-  }
-  .tl-step {
+  .actions {
     display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    padding-bottom: 16px;
-    position: relative;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
   }
-  .tl-step:not(.last)::after {
-    content: '';
-    position: absolute;
-    left: 4px;
-    top: 14px;
-    bottom: 0;
-    width: 1px;
-    background: var(--border);
+  .settle-label {
+    font-size: 0.875rem;
+    color: var(--text-3);
+    font-weight: 600;
   }
-  .tl-step.done:not(.last)::after { background: var(--lime); }
-  .tl-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--border);
-    flex-shrink: 0;
-    margin-top: 4px;
-  }
-  .tl-step.done .tl-dot { background: var(--lime); box-shadow: 0 0 6px var(--lime); }
-  .tl-content { flex: 1; }
-  .tl-label { font-size: 0.8125rem; font-weight: 600; display: block; }
-  .tl-date { font-size: 0.6875rem; color: var(--text-3); }
 
-  /* ── Actions ── */
-  .actions { display: flex; gap: 10px; }
+  .error {
+    color: var(--rose);
+    font-size: 0.875rem;
+    margin-bottom: 12px;
+  }
 
-  @media (max-width: 600px) {
+  @media (max-width: 640px) {
+    .positions { flex-direction: column; }
     .detail-card { padding: 20px; }
-    .matchup { gap: 16px; }
-    .detail-row { grid-template-columns: 1fr; }
   }
 </style>

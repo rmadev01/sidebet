@@ -1,78 +1,97 @@
 <script lang="ts">
-  let activeTab = $state<'active' | 'proposed' | 'history'>('active');
+  import { onMount } from 'svelte';
+  import { isAuthenticated } from '$lib/stores';
+  import { getBets } from '$lib/api';
 
-  const bets = {
-    active: [
-      { id: 'b1', question: 'Lakers defeat Celtics on Mar 5', position: 'Lakers win', amount: 0.5, odds: '3:2', opponent: 'chad_bets' },
-      { id: 'b2', question: 'Bitcoin hits $150k by June 2026', position: 'Yes', amount: 1.0, odds: '2:1', opponent: 'crypto_mike' },
-    ],
-    proposed: [
-      { id: 'b3', question: 'Knicks beat 76ers tonight', position: 'Knicks win', amount: 0.1, odds: '1:1', opponent: 'hoops_fan', expires: '23h left' },
-    ],
-    history: [
-      { id: 'b4', question: 'Warriors win 2025-26 title', position: 'Yes', amount: 0.25, odds: '5:1', opponent: 'dub_nation', outcome: 'win' },
-      { id: 'b5', question: 'Fed cuts rates in Jan 2026', position: 'Yes', amount: 0.5, odds: '1:1', opponent: 'macro_trader', outcome: 'loss' },
-    ],
-  };
+  let activeBets = $state<any[]>([]);
+  let proposedBets = $state<any[]>([]);
+  let historyBets = $state<any[]>([]);
+  let tab = $state('active');
+  let loading = $state(true);
 
-  function accentClass(tab: string, outcome?: string) {
-    if (tab === 'active') return 'accent-bar--sky';
-    if (tab === 'proposed') return 'accent-bar--amber';
-    if (outcome === 'win') return 'accent-bar--lime';
-    return 'accent-bar--rose';
+  onMount(async () => {
+    if (!$isAuthenticated) { loading = false; return; }
+    try {
+      const [active, proposed, history] = await Promise.all([
+        getBets({ status: 'active' }).catch(() => []),
+        getBets({ status: 'proposed' }).catch(() => []),
+        getBets({ status: 'settled' }).catch(() => []),
+      ]);
+      activeBets = active;
+      proposedBets = proposed;
+      historyBets = history;
+    } catch { /* ignore */ }
+    loading = false;
+  });
+
+  function formatCoins(n: number) { return n?.toLocaleString() ?? '0'; }
+  function timeAgo(d: string) {
+    const diff = Date.now() - new Date(d).getTime();
+    const h = Math.floor(diff / 3600000);
+    return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
   }
 
-  function statusText(tab: string, outcome?: string) {
-    if (tab === 'active') return 'Active';
-    if (tab === 'proposed') return 'Pending';
-    if (outcome === 'win') return 'Won';
-    return 'Lost';
-  }
-
-  function tagClass(tab: string, outcome?: string) {
-    if (tab === 'active') return 'tag--active';
-    if (tab === 'proposed') return 'tag--pending';
-    if (outcome === 'win') return 'tag--win';
-    return 'tag--loss';
+  function currentBets() {
+    if (tab === 'active') return activeBets;
+    if (tab === 'proposed') return proposedBets;
+    return historyBets;
   }
 </script>
 
 <svelte:head>
-  <title>SideBet — My Bets</title>
+  <title>My Bets — SideBet</title>
 </svelte:head>
 
 <div class="bets-page">
-  <div class="page-head animate-in">
-    <div>
-      <h1>My Bets</h1>
-      <p class="subtitle">Track all your active and past bets</p>
+  <div class="page-head">
+    <h1>My Bets</h1>
+    <a href="/bets/new" class="btn btn-primary btn-sm">+ New Bet</a>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab" class:active={tab === 'active'} onclick={() => tab = 'active'}>
+      Active <span class="tab-count">{activeBets.length}</span>
+    </button>
+    <button class="tab" class:active={tab === 'proposed'} onclick={() => tab = 'proposed'}>
+      Proposed <span class="tab-count">{proposedBets.length}</span>
+    </button>
+    <button class="tab" class:active={tab === 'history'} onclick={() => tab = 'history'}>
+      History <span class="tab-count">{historyBets.length}</span>
+    </button>
+  </div>
+
+  <!-- List -->
+  {#if loading}
+    <p class="empty-state">Loading…</p>
+  {:else if currentBets().length === 0}
+    <p class="empty-state">No bets here yet.</p>
+  {:else}
+    <div class="bet-list stagger">
+      {#each currentBets() as bet}
+        <a href="/bets/{bet.id}" class="bet-card accent-bar"
+          class:accent-bar--lime={bet.status === 'settled' && bet.outcome?.includes('creator')}
+          class:accent-bar--rose={bet.status === 'settled' && bet.outcome?.includes('opponent')}
+          class:accent-bar--sky={bet.status === 'active'}
+          class:accent-bar--amber={bet.status === 'proposed'}
+        >
+          <div class="bet-card-body">
+            <span class="bet-q">{bet.question}</span>
+            <span class="bet-meta">{bet.odds_numerator}:{bet.odds_denominator} · {timeAgo(bet.created_at)}</span>
+          </div>
+          <div class="bet-card-right">
+            <span class="mono">{formatCoins(bet.amount)} coins</span>
+            <span class="tag"
+              class:tag--win={bet.outcome?.includes('win')}
+              class:tag--loss={bet.outcome?.includes('lose')}
+              class:tag--active={bet.status === 'active'}
+              class:tag--pending={bet.status === 'proposed'}
+            >{bet.status}</span>
+          </div>
+        </a>
+      {/each}
     </div>
-    <a href="/bets/new" class="btn btn-primary">New Bet</a>
-  </div>
-
-  <div class="seg-control animate-in" style="animation-delay:60ms">
-    <button class="seg-btn" class:active={activeTab === 'active'} onclick={() => activeTab = 'active'}>Active {bets.active.length}</button>
-    <button class="seg-btn" class:active={activeTab === 'proposed'} onclick={() => activeTab = 'proposed'}>Proposed {bets.proposed.length}</button>
-    <button class="seg-btn" class:active={activeTab === 'history'} onclick={() => activeTab = 'history'}>History {bets.history.length}</button>
-  </div>
-
-  <div class="stagger">
-    {#each bets[activeTab] as bet}
-      <a href="/bets/{bet.id}" class="bet-row accent-bar {accentClass(activeTab, bet.outcome)}">
-        <div class="bet-body">
-          <span class="bet-q">{bet.question}</span>
-          <span class="bet-sub">
-            vs @{bet.opponent} · Your pick: {bet.position} · {bet.odds}
-            {#if bet.expires} · {bet.expires}{/if}
-          </span>
-        </div>
-        <div class="bet-right">
-          <span class="mono amt">{bet.amount} ETH</span>
-          <span class="tag {tagClass(activeTab, bet.outcome)}">{statusText(activeTab, bet.outcome)}</span>
-        </div>
-      </a>
-    {/each}
-  </div>
+  {/if}
 </div>
 
 <style>
@@ -80,15 +99,52 @@
 
   .page-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
-    gap: 16px;
+    margin-bottom: 24px;
   }
-  .page-head h1 { margin-bottom: 4px; }
-  .subtitle { color: var(--text-2); font-size: 0.9375rem; }
+  .page-head h1 { font-size: 1.5rem; }
 
-  .bet-row {
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 24px;
+    background: var(--bg-sunken);
+    border-radius: var(--r-md);
+    padding: 2px;
+  }
+  .tab {
+    flex: 1;
+    padding: 8px 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-3);
+    background: none;
+    border: none;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all var(--dur-fast) var(--ease-out);
+  }
+  .tab:hover { color: var(--text-2); }
+  .tab.active { background: var(--bg-surface); color: var(--text-1); }
+  .tab-count {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    opacity: 0.6;
+  }
+
+  .empty-state {
+    color: var(--text-3);
+    font-size: 0.875rem;
+    padding: 32px 0;
+    text-align: center;
+  }
+
+  .bet-card {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -99,39 +155,37 @@
     color: inherit;
     transition: background var(--dur-fast) var(--ease-out);
   }
-  .bet-row:last-child { border-bottom: none; }
-  .bet-row:hover { background: var(--bg-raised); }
+  .bet-card:last-child { border-bottom: none; }
+  .bet-card:hover { background: var(--bg-raised); }
 
-  .bet-body { flex: 1; min-width: 0; }
+  .bet-card-body { flex: 1; min-width: 0; }
   .bet-q {
     display: block;
     font-weight: 600;
     font-size: 0.9375rem;
-    line-height: 1.35;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .bet-sub { font-size: 0.75rem; color: var(--text-3); }
+  .bet-meta { font-size: 0.75rem; color: var(--text-3); }
 
-  .bet-right {
+  .bet-card-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     flex-shrink: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
-  .amt { font-size: 0.875rem; font-weight: 600; color: var(--text-1); }
-
   .tag {
-    font-family: var(--font-display);
     font-size: 0.6875rem;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: var(--r-sm);
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: var(--r-sm);
   }
   .tag--win { background: var(--lime-dim); color: var(--lime); }
   .tag--loss { background: var(--rose-dim); color: var(--rose); }
@@ -139,8 +193,7 @@
   .tag--pending { background: var(--amber-dim); color: var(--amber); }
 
   @media (max-width: 640px) {
-    .page-head { flex-direction: column; }
-    .bet-row { flex-direction: column; align-items: flex-start; gap: 8px; }
-    .bet-right { width: 100%; justify-content: space-between; }
+    .bet-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .bet-card-right { width: 100%; justify-content: space-between; }
   }
 </style>

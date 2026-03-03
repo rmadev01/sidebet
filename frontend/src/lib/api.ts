@@ -45,10 +45,19 @@ export const getBet = (id: string) => apiFetch(`/api/bets/${id}`);
 export const acceptBet = (id: string) => apiFetch(`/api/bets/${id}/accept`, { method: 'POST' });
 export const declineBet = (id: string) => apiFetch(`/api/bets/${id}/decline`, { method: 'POST' });
 export const cancelBet = (id: string) => apiFetch(`/api/bets/${id}/cancel`, { method: 'POST' });
-export const settleBet = (id: string) => apiFetch(`/api/bets/${id}/settle`, { method: 'POST' });
+export const settleBet = (id: string, winner: string) => apiFetch(`/api/bets/${id}/settle`, { method: 'POST', body: JSON.stringify({ winner }) });
 
 // ── Feed ──
 export const getFeed = () => apiFetch('/api/feed');
+
+// ── Wallet ──
+export const getBalance = () => apiFetch('/api/wallet/balance');
+export const claimDailyBonus = () => apiFetch('/api/wallet/daily-bonus', { method: 'POST' });
+export const getTransactions = (limit?: number) => apiFetch(`/api/wallet/transactions${limit ? '?limit=' + limit : ''}`);
+
+// ── Notifications ──
+export const getNotifications = () => apiFetch('/api/notifications');
+export const markNotificationsRead = () => apiFetch('/api/notifications/read', { method: 'POST' });
 
 // ── Auth (via Better Auth sidecar) ──
 const AUTH_BASE = 'http://localhost:3001';

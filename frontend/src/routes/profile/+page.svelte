@@ -1,255 +1,245 @@
 <script lang="ts">
-  import { user } from '$lib/stores';
+  import { onMount } from 'svelte';
+  import { user, isAuthenticated, coinBalance } from '$lib/stores';
+  import { getMe, getBalance, claimDailyBonus, getTransactions } from '$lib/api';
 
-  const stats = {
-    wins: 12,
-    losses: 8,
-    winRate: 60.0,
-    streak: 3,
-    streakType: 'W',
-    totalWagered: '2.450',
-    totalBets: 20,
-    activeBets: 3,
-    avgBet: '0.123',
-    bestWin: '1.000',
-    accuracy: { nba: 66.7, politics: 50.0 },
-  };
+  let profile = $state<any>(null);
+  let wallet = $state<any>(null);
+  let transactions = $state<any[]>([]);
+  let loading = $state(true);
+  let claiming = $state(false);
 
-  // SVG donut for win rate
-  const circumference = 2 * Math.PI * 44;
-  const winOffset = circumference - (stats.winRate / 100) * circumference;
+  onMount(async () => {
+    if (!$isAuthenticated) { loading = false; return; }
+    try {
+      const [me, w, txns] = await Promise.all([
+        getMe(),
+        getBalance(),
+        getTransactions(20),
+      ]);
+      profile = me;
+      wallet = w;
+      transactions = txns;
+    } catch { /* ignore */ }
+    loading = false;
+  });
+
+  function formatCoins(n: number) { return n?.toLocaleString() ?? '0'; }
+
+  function winRate() {
+    if (!profile) return 0;
+    const total = profile.wins + profile.losses;
+    return total > 0 ? Math.round((profile.wins / total) * 100) : 0;
+  }
+
+  async function doClaim() {
+    claiming = true;
+    try {
+      const res = await claimDailyBonus();
+      coinBalance.set(res.new_balance);
+      wallet.coin_balance = res.new_balance;
+      wallet.bonus_available = false;
+    } catch { /* already claimed */ }
+    claiming = false;
+  }
+
+  function typeLabel(t: string) {
+    const map: Record<string,string> = {
+      signup_bonus: '🎁 Signup Bonus',
+      daily_bonus: '🎁 Daily Bonus',
+      bet_placed: '🎲 Bet Placed',
+      bet_won: '🏆 Bet Won',
+      bet_refund: '↩️ Refund',
+    };
+    return map[t] || t;
+  }
 </script>
 
-<svelte:head><title>SideBet — Profile</title></svelte:head>
+<svelte:head>
+  <title>Profile — SideBet</title>
+</svelte:head>
 
-<div class="profile">
-  <!-- Header -->
-  <div class="prof-head animate-in">
-    <div class="av av--lg av-1">{$user?.name?.[0]?.toUpperCase() || 'U'}</div>
-    <div class="prof-info">
-      <h1>{$user?.name || 'Username'}</h1>
-      <span class="handle">@{$user?.name?.toLowerCase()?.replace(/\s/g, '_') || 'user'}</span>
-    </div>
-  </div>
-
-  <!-- Win Rate Ring + Record -->
-  <div class="record-section animate-in" style="animation-delay:60ms">
-    <div class="ring-wrap">
-      <svg viewBox="0 0 100 100" class="ring-svg">
-        <circle cx="50" cy="50" r="44" fill="none" stroke="var(--bg-raised)" stroke-width="6" />
-        <circle cx="50" cy="50" r="44" fill="none" stroke="var(--lime)" stroke-width="6"
-          stroke-linecap="round"
-          stroke-dasharray={circumference}
-          stroke-dashoffset={winOffset}
-          transform="rotate(-90 50 50)"
-          class="ring-fill" />
-      </svg>
-      <div class="ring-center">
-        <span class="ring-pct">{stats.winRate}%</span>
-        <span class="ring-label">win rate</span>
+<div class="profile-page">
+  {#if loading}
+    <p class="empty-state">Loading…</p>
+  {:else if !profile}
+    <p class="empty-state">Sign in to view your profile.</p>
+  {:else}
+    <!-- Header -->
+    <div class="profile-header animate-in">
+      <div class="profile-av">
+        <span class="av av-2 av--lg">{profile.display_name?.[0]?.toUpperCase() || '?'}</span>
+      </div>
+      <div class="profile-info">
+        <h1>{profile.display_name}</h1>
+        <span class="handle">@{profile.username}</span>
       </div>
     </div>
 
-    <div class="record-nums">
-      <div class="rec">
-        <span class="rec-n" style="color:var(--lime)">{stats.wins}</span>
-        <span class="rec-l">Wins</span>
+    <!-- Wallet Card -->
+    <div class="wallet-card animate-in" style="animation-delay: 80ms">
+      <div class="wallet-balance">
+        <span class="wallet-label">Coin Balance</span>
+        <span class="wallet-amount mono">{formatCoins(wallet?.coin_balance || 0)}</span>
       </div>
-      <div class="rec-sep"></div>
-      <div class="rec">
-        <span class="rec-n" style="color:var(--rose)">{stats.losses}</span>
-        <span class="rec-l">Losses</span>
+      {#if wallet?.bonus_available}
+        <button class="btn btn-primary" onclick={doClaim} disabled={claiming}>
+          {claiming ? 'Claiming…' : 'Claim Daily Bonus (+100)'}
+        </button>
+      {:else}
+        <span class="wallet-sub">Daily bonus claimed ✓</span>
+      {/if}
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid animate-in" style="animation-delay: 160ms">
+      <div class="stat-card">
+        <span class="stat-val lime">{winRate()}%</span>
+        <span class="stat-label">Win Rate</span>
       </div>
-      <div class="rec-sep"></div>
-      <div class="rec">
-        <span class="rec-n" style="color:var(--amber)">{stats.streak}{stats.streakType}</span>
-        <span class="rec-l">Streak</span>
+      <div class="stat-card">
+        <span class="stat-val">{profile.wins}</span>
+        <span class="stat-label">Wins</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val">{profile.losses}</span>
+        <span class="stat-label">Losses</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-val mono">{formatCoins(profile.total_wagered)}</span>
+        <span class="stat-label">Total Wagered</span>
       </div>
     </div>
-  </div>
 
-  <!-- Stats Strip -->
-  <div class="stats-strip animate-in" style="animation-delay:120ms">
-    <div class="stat-item"><span class="stat-val mono">{stats.totalWagered}</span><span class="stat-unit">ETH wagered</span></div>
-    <div class="stat-item"><span class="stat-val mono">{stats.totalBets}</span><span class="stat-unit">total bets</span></div>
-    <div class="stat-item"><span class="stat-val mono">{stats.activeBets}</span><span class="stat-unit">active</span></div>
-    <div class="stat-item"><span class="stat-val mono">{stats.avgBet}</span><span class="stat-unit">avg bet</span></div>
-    <div class="stat-item"><span class="stat-val mono">{stats.bestWin}</span><span class="stat-unit">best win</span></div>
-  </div>
-
-  <!-- Accuracy -->
-  <section class="accuracy-section animate-in" style="animation-delay:180ms">
-    <h3>Accuracy by Category</h3>
-    <div class="acc-bars">
-      <div class="acc-row">
-        <span class="acc-label">NBA</span>
-        <div class="acc-track">
-          <div class="acc-fill" style="width:{stats.accuracy.nba}%; background:var(--lime)">
-            <span class="acc-pct">{stats.accuracy.nba}%</span>
-          </div>
+    <!-- Transaction History -->
+    {#if transactions.length > 0}
+      <section class="section animate-in" style="animation-delay: 240ms">
+        <h2>Recent Transactions</h2>
+        <div class="txn-list">
+          {#each transactions as txn}
+            <div class="txn-row">
+              <span class="txn-type">{typeLabel(txn.type)}</span>
+              <span class="txn-amount mono" class:positive={txn.amount > 0} class:negative={txn.amount < 0}>
+                {txn.amount > 0 ? '+' : ''}{formatCoins(txn.amount)}
+              </span>
+            </div>
+          {/each}
         </div>
-      </div>
-      <div class="acc-row">
-        <span class="acc-label">Politics</span>
-        <div class="acc-track">
-          <div class="acc-fill" style="width:{stats.accuracy.politics}%; background:var(--sky)">
-            <span class="acc-pct">{stats.accuracy.politics}%</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+      </section>
+    {/if}
+  {/if}
 </div>
 
 <style>
-  .profile { max-width: 640px; }
+  .profile-page { max-width: 640px; }
 
-  /* ── Header ── */
-  .prof-head {
+  .empty-state {
+    color: var(--text-3);
+    font-size: 0.875rem;
+    padding: 40px 0;
+    text-align: center;
+  }
+
+  .profile-header {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 36px;
+    gap: 20px;
+    margin-bottom: 24px;
   }
-  .prof-info h1 { margin-bottom: 2px; }
+  .profile-info h1 { font-size: 1.5rem; margin-bottom: 2px; }
   .handle { font-size: 0.875rem; color: var(--text-3); }
 
-  /* ── Record Section ── */
-  .record-section {
-    display: flex;
-    align-items: center;
-    gap: 40px;
-    margin-bottom: 36px;
-    padding: 28px 32px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-xl);
+  .av--lg {
+    width: 64px;
+    height: 64px;
+    font-size: 1.5rem;
   }
 
-  .ring-wrap {
-    position: relative;
-    width: 100px;
-    height: 100px;
-    flex-shrink: 0;
-  }
-  .ring-svg { width: 100%; height: 100%; }
-  .ring-fill { transition: stroke-dashoffset 0.8s var(--ease-out); }
-  .ring-center {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-  .ring-pct {
-    font-family: var(--font-display);
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--lime);
-    line-height: 1;
-  }
-  .ring-label { font-size: 0.625rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
-
-  .record-nums {
+  /* Wallet Card */
+  .wallet-card {
     display: flex;
     align-items: center;
-    gap: 24px;
+    justify-content: space-between;
+    background: linear-gradient(135deg, hsl(75 70% 12%), hsl(75 60% 8%));
+    border: 1px solid var(--lime-dim);
+    border-radius: var(--r-lg);
+    padding: 24px;
+    margin-bottom: 24px;
   }
-  .rec { text-align: center; }
-  .rec-n {
+  .wallet-label {
     display: block;
-    font-family: var(--font-display);
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-3);
     margin-bottom: 4px;
   }
-  .rec-l {
-    font-size: 0.6875rem;
-    color: var(--text-3);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
+  .wallet-amount {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--lime);
   }
-  .rec-sep {
-    width: 1px;
-    height: 32px;
-    background: var(--border);
+  .wallet-sub {
+    font-size: 0.8125rem;
+    color: var(--text-3);
   }
 
-  /* ── Stats Strip ── */
-  .stats-strip {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 4px 0;
-    margin-bottom: 36px;
-    -webkit-overflow-scrolling: touch;
+  /* Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 32px;
   }
-  .stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 14px 18px;
+  .stat-card {
     background: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    flex-shrink: 0;
-    min-width: 100px;
+    border-radius: var(--r-md);
+    padding: 16px;
+    text-align: center;
   }
   .stat-val {
-    font-size: 1.125rem;
-    font-weight: 700;
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    margin-bottom: 4px;
     color: var(--text-1);
-    margin-bottom: 2px;
   }
-  .stat-unit {
-    font-size: 0.625rem;
-    color: var(--text-3);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+  .stat-label {
+    font-size: 0.6875rem;
     font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-3);
   }
+  .lime { color: var(--lime); }
 
-  /* ── Accuracy ── */
-  .accuracy-section h3 { margin-bottom: 16px; }
-  .acc-bars { display: flex; flex-direction: column; gap: 12px; }
-  .acc-row { display: flex; align-items: center; gap: 14px; }
-  .acc-label {
-    width: 70px;
-    font-family: var(--font-display);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--text-2);
-    flex-shrink: 0;
+  /* Transactions */
+  .section h2 {
+    font-size: 1rem;
+    margin-bottom: 12px;
   }
-  .acc-track {
-    flex: 1;
-    height: 24px;
-    background: var(--bg-raised);
+  .txn-list {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: var(--r-md);
     overflow: hidden;
   }
-  .acc-fill {
-    height: 100%;
-    border-radius: var(--r-md);
+  .txn-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: flex-end;
-    padding-right: 8px;
-    transition: width 0.6s var(--ease-out);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
   }
-  .acc-pct {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: var(--bg-root);
-  }
+  .txn-row:last-child { border-bottom: none; }
+  .txn-type { color: var(--text-2); }
+  .txn-amount { font-weight: 700; }
+  .positive { color: var(--lime); }
+  .negative { color: var(--rose); }
 
-  @media (max-width: 600px) {
-    .record-section { flex-direction: column; gap: 20px; padding: 20px; }
-    .record-nums { gap: 16px; }
-    .prof-head { flex-direction: column; text-align: center; }
+  @media (max-width: 640px) {
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .wallet-card { flex-direction: column; align-items: flex-start; gap: 16px; }
   }
 </style>

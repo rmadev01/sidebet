@@ -1,49 +1,115 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { isAuthenticated } from '$lib/stores';
+  import { getFriends, getFriendRequests, searchUsers, sendFriendRequest, acceptFriend, declineFriend, removeFriend } from '$lib/api';
+
+  let friends = $state<any[]>([]);
+  let requests = $state<any[]>([]);
   let searchQuery = $state('');
+  let searchResults = $state<any[]>([]);
+  let searching = $state(false);
+  let loading = $state(true);
 
-  const friends = [
-    { id: '1', username: 'chad_bets', name: 'Chad', wins: 15, losses: 8, av: 1 },
-    { id: '2', username: 'crypto_mike', name: 'Mike', wins: 22, losses: 12, av: 2 },
-    { id: '3', username: 'hoops_fan', name: 'Sarah', wins: 9, losses: 5, av: 3 },
-    { id: '4', username: 'dub_nation', name: 'Jay', wins: 11, losses: 11, av: 4 },
-    { id: '5', username: 'poly_whale', name: 'Alex', wins: 18, losses: 14, av: 5 },
-  ];
+  onMount(async () => {
+    if (!$isAuthenticated) { loading = false; return; }
+    try {
+      const [f, r] = await Promise.all([
+        getFriends().catch(() => []),
+        getFriendRequests().catch(() => []),
+      ]);
+      friends = f;
+      requests = r;
+    } catch { /* ignore */ }
+    loading = false;
+  });
 
-  const requests = [
-    { id: 'r1', username: 'new_player', name: 'Jordan', av: 6 },
-  ];
+  async function doSearch() {
+    if (searchQuery.length < 2) { searchResults = []; return; }
+    searching = true;
+    try {
+      searchResults = await searchUsers(searchQuery);
+    } catch { searchResults = []; }
+    searching = false;
+  }
 
-  let filtered = $derived(
-    searchQuery
-      ? friends.filter(f => f.username.includes(searchQuery.toLowerCase()) || f.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      : friends
-  );
+  async function doSendRequest(userId: string) {
+    try {
+      await sendFriendRequest(userId);
+      searchResults = searchResults.filter(u => u.id !== userId);
+    } catch { /* ignore */ }
+  }
+
+  async function doAccept(id: string) {
+    try {
+      await acceptFriend(id);
+      const req = requests.find(r => r.id === id);
+      requests = requests.filter(r => r.id !== id);
+      if (req) friends = [...friends, req];
+    } catch { /* ignore */ }
+  }
+
+  async function doDecline(id: string) {
+    try {
+      await declineFriend(id);
+      requests = requests.filter(r => r.id !== id);
+    } catch { /* ignore */ }
+  }
+
+  async function doRemove(id: string) {
+    try {
+      await removeFriend(id);
+      friends = friends.filter(f => f.id !== id);
+    } catch { /* ignore */ }
+  }
 </script>
 
-<svelte:head><title>SideBet — Friends</title></svelte:head>
+<svelte:head>
+  <title>Friends — SideBet</title>
+</svelte:head>
 
 <div class="friends-page">
-  <h1 class="animate-in">Friends</h1>
-  <p class="subtitle animate-in" style="animation-delay:40ms">Manage your betting circle</p>
+  <h1>Friends</h1>
 
-  <div class="search-row animate-in" style="animation-delay:60ms">
-    <input class="input" bind:value={searchQuery} placeholder="Search friends…" />
+  <!-- Search -->
+  <div class="search-bar animate-in">
+    <input
+      type="text"
+      class="input"
+      placeholder="Search users by name or username…"
+      bind:value={searchQuery}
+      oninput={doSearch}
+    />
+    {#if searchResults.length > 0}
+      <div class="search-results">
+        {#each searchResults as u}
+          <div class="search-row">
+            <span class="av av-1 av--sm">{u.display_name?.[0]?.toUpperCase() || '?'}</span>
+            <div class="search-info">
+              <span class="search-name">{u.display_name}</span>
+              <span class="search-handle">@{u.username}</span>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick={() => doSendRequest(u.id)}>Add</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 
+  <!-- Pending Requests -->
   {#if requests.length > 0}
-    <section class="section animate-in" style="animation-delay:80ms">
-      <h3>Requests <span class="req-count">{requests.length}</span></h3>
-      <div class="stagger">
+    <section class="section animate-in" style="animation-delay: 80ms">
+      <h2>Pending Requests <span class="count">{requests.length}</span></h2>
+      <div class="friend-list">
         {#each requests as req}
-          <div class="friend-row accent-bar accent-bar--amber">
-            <div class="av av-{req.av}">{req.name[0]}</div>
-            <div class="f-info">
-              <span class="f-name">@{req.username}</span>
-              <span class="f-sub">{req.name}</span>
+          <div class="friend-row">
+            <span class="av av-2 av--sm">{req.display_name?.[0] || '?'}</span>
+            <div class="friend-info">
+              <span class="friend-name">{req.display_name || req.username || 'User'}</span>
+              <span class="friend-handle">@{req.username || '...'}</span>
             </div>
-            <div class="f-actions">
-              <button class="btn btn-accept btn-sm">Accept</button>
-              <button class="btn btn-ghost btn-sm">Ignore</button>
+            <div class="friend-actions">
+              <button class="btn btn-primary btn-sm" onclick={() => doAccept(req.id)}>Accept</button>
+              <button class="btn btn-ghost btn-sm" onclick={() => doDecline(req.id)}>Ignore</button>
             </div>
           </div>
         {/each}
@@ -51,75 +117,104 @@
     </section>
   {/if}
 
-  <section class="section animate-in" style="animation-delay:120ms">
-    <h3>Your Friends</h3>
-    <div class="stagger">
-      {#each filtered as f}
-        <div class="friend-row">
-          <div class="av av-{f.av}">{f.name[0]}</div>
-          <div class="f-info">
-            <span class="f-name">@{f.username}</span>
-            <span class="f-sub">{f.wins}W – {f.losses}L</span>
+  <!-- Friends -->
+  <section class="section animate-in" style="animation-delay: 160ms">
+    <h2>Your Friends <span class="count">{friends.length}</span></h2>
+    {#if friends.length === 0}
+      <p class="empty-state">No friends yet. Search above to add people!</p>
+    {:else}
+      <div class="friend-list">
+        {#each friends as f}
+          <div class="friend-row">
+            <span class="av av-1 av--sm">{f.display_name?.[0]?.toUpperCase() || '?'}</span>
+            <div class="friend-info">
+              <span class="friend-name">{f.display_name || f.username}</span>
+              <span class="friend-handle">@{f.username}</span>
+            </div>
+            <div class="friend-actions">
+              <a href="/bets/new?opponent={f.id}" class="btn btn-primary btn-sm">Challenge</a>
+              <button class="btn btn-ghost btn-sm" onclick={() => doRemove(f.id)}>Remove</button>
+            </div>
           </div>
-          <a href="/bets/new?opponent={f.id}" class="challenge-link">Challenge</a>
-        </div>
-      {/each}
-    </div>
+        {/each}
+      </div>
+    {/if}
   </section>
 </div>
 
 <style>
-  .friends-page { max-width: 600px; }
-  .friends-page h1 { margin-bottom: 4px; }
-  .subtitle { color: var(--text-2); font-size: 0.9375rem; margin-bottom: 24px; }
+  .friends-page { max-width: 640px; }
 
-  .search-row { margin-bottom: 28px; }
-  .search-row .input { max-width: 320px; }
+  h1 { font-size: 1.5rem; margin-bottom: 24px; }
+
+  .search-bar {
+    position: relative;
+    margin-bottom: 32px;
+  }
+  .search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--r-md) var(--r-md);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 50;
+  }
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-row:last-child { border-bottom: none; }
+  .search-info { flex: 1; min-width: 0; }
+  .search-name { display: block; font-weight: 600; font-size: 0.875rem; }
+  .search-handle { font-size: 0.75rem; color: var(--text-3); }
 
   .section { margin-bottom: 32px; }
-  .section h3 {
+  .section h2 {
+    font-size: 1rem;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 14px;
   }
-  .req-count {
+  .count {
     font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    background: var(--amber-dim);
-    color: var(--amber);
-    padding: 1px 7px;
+    font-size: 0.75rem;
+    color: var(--text-3);
+    background: var(--bg-raised);
+    padding: 2px 8px;
     border-radius: var(--r-full);
   }
 
+  .empty-state {
+    color: var(--text-3);
+    font-size: 0.875rem;
+    padding: 20px 0;
+  }
+
+  .friend-list {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
   .friend-row {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 0;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border);
   }
   .friend-row:last-child { border-bottom: none; }
-
-  .f-info { flex: 1; }
-  .f-name {
-    display: block;
-    font-weight: 600;
-    font-size: 0.875rem;
-    line-height: 1.3;
-  }
-  .f-sub { font-size: 0.75rem; color: var(--text-3); }
-
-  .f-actions { display: flex; gap: 6px; }
-
-  .challenge-link {
-    font-family: var(--font-display);
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--lime);
-    text-decoration: none;
-    opacity: 0;
-    transition: opacity var(--dur-fast);
-  }
-  .friend-row:hover .challenge-link { opacity: 1; }
+  .friend-info { flex: 1; min-width: 0; }
+  .friend-name { display: block; font-weight: 600; font-size: 0.9375rem; }
+  .friend-handle { font-size: 0.75rem; color: var(--text-3); }
+  .friend-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>

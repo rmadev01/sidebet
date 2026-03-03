@@ -12,10 +12,11 @@ pub struct User {
     pub display_name: String,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
-    pub wallet_address: Option<String>,
+    pub coin_balance: i64,
+    pub last_daily_bonus: Option<DateTime<Utc>>,
     pub wins: i32,
     pub losses: i32,
-    pub total_wagered_wei: i64,
+    pub total_wagered: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -25,7 +26,6 @@ pub struct UpdateProfile {
     pub display_name: Option<String>,
     pub bio: Option<String>,
     pub avatar_url: Option<String>,
-    pub wallet_address: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -98,14 +98,12 @@ pub struct Bet {
     pub question: String,
     pub creator_position: String,
     pub opponent_position: String,
-    pub amount_wei: i64,
+    pub amount: i64,
     pub odds_numerator: i32,
     pub odds_denominator: i32,
     pub reference_odds: Option<serde_json::Value>,
     pub status: String,
-    pub on_chain_bet_id: Option<i64>,
-    pub contract_address: Option<String>,
-    pub assertion_id: Option<String>,
+    pub winner_id: Option<Uuid>,
     pub outcome: Option<String>,
     pub resolved_at: Option<DateTime<Utc>>,
     pub expires_at: DateTime<Utc>,
@@ -120,11 +118,26 @@ pub struct CreateBet {
     pub question: String,
     pub creator_position: String,
     pub opponent_position: String,
-    pub amount_wei: i64,
+    pub amount: i64,
     pub odds_numerator: i32,
     pub odds_denominator: i32,
     pub reference_odds: Option<serde_json::Value>,
     pub expires_in_hours: Option<i64>,
+}
+
+// ── Transactions (coin ledger) ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Transaction {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    #[sqlx(rename = "type")]
+    #[serde(rename = "type")]
+    pub tx_type: String,
+    pub amount: i64,
+    pub balance_after: i64,
+    pub reference_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
 }
 
 // ── Notifications ──
@@ -170,4 +183,27 @@ pub struct AuthUser {
     pub name: String,
     pub email: String,
     pub image: Option<String>,
+}
+
+// ── Wallet / Daily Bonus ──
+
+#[derive(Debug, Serialize)]
+pub struct WalletBalance {
+    pub coin_balance: i64,
+    pub last_daily_bonus: Option<DateTime<Utc>>,
+    pub bonus_available: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DailyBonusResponse {
+    pub coins_awarded: i64,
+    pub new_balance: i64,
+}
+
+// ── Settlement ──
+
+#[derive(Debug, Deserialize)]
+pub struct SettleBetRequest {
+    /// "creator" or "opponent"
+    pub winner: String,
 }

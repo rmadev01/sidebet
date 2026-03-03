@@ -49,14 +49,26 @@ async fn main() {
     let ws_broadcast = ws::create_broadcast();
 
     // CORS — must allow credentials for cookie-based auth
+    // Note: can't use Any for methods/headers when allow_credentials is true
     let frontend_origin: HeaderValue = cfg
         .frontend_url
         .parse()
         .expect("FRONTEND_URL must be a valid origin");
     let cors = CorsLayer::new()
         .allow_origin(frontend_origin)
-        .allow_methods(tower_http::cors::Any)
-        .allow_headers(tower_http::cors::Any)
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PATCH,
+            axum::http::Method::DELETE,
+            axum::http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::COOKIE,
+            axum::http::header::ACCEPT,
+        ])
         .allow_credentials(true);
 
     // Auth-protected routes
@@ -85,6 +97,25 @@ async fn main() {
         .route("/bets/{id}/decline", post(routes::bets::decline_bet))
         .route("/bets/{id}/cancel", post(routes::bets::cancel_bet))
         .route("/bets/{id}/settle", post(routes::bets::settle_bet))
+        // Wallet
+        .route("/wallet/balance", get(routes::wallet::get_balance))
+        .route(
+            "/wallet/transactions",
+            get(routes::wallet::get_transactions),
+        )
+        .route(
+            "/wallet/daily-bonus",
+            post(routes::wallet::claim_daily_bonus),
+        )
+        // Notifications
+        .route(
+            "/notifications",
+            get(routes::notifications::get_notifications),
+        )
+        .route(
+            "/notifications/read",
+            post(routes::notifications::mark_read),
+        )
         // Feed
         .route("/feed", get(routes::feed::get_feed))
         // WebSocket
