@@ -84,7 +84,7 @@
                 : 'text-text-3 hover:text-text-2 hover:bg-raised'}"
             onclick={() => mobileOpen = false}
           >
-            <svelte:component this={item.icon} size={15} strokeWidth={2} />
+            <item.icon size={15} strokeWidth={2} />
             {item.label}
           </a>
         {/each}
@@ -130,7 +130,7 @@
                 : 'text-text-3 hover:text-text-2 hover:bg-raised'}"
             onclick={() => mobileOpen = false}
           >
-            <svelte:component this={item.icon} size={16} strokeWidth={2} />
+            <item.icon size={16} strokeWidth={2} />
             {item.label}
           </a>
         {/each}

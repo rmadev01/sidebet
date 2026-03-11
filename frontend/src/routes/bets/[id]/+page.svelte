@@ -74,13 +74,13 @@
     acting = false;
   }
 
-  async function doSettle() {
+  async function doSettle(outcome: 'event_result' | 'disputed') {
     if (!bet) return;
     const current = bet;
     acting = true;
     error = '';
     try {
-      bet = await settleBet(current.id, 'disputed');
+      bet = await settleBet(current.id, outcome);
     } catch (e: any) { error = e.message; }
     acting = false;
   }
@@ -209,9 +209,12 @@
           </button>
         {/if}
         {#if bet.status === 'active' && (isCreator() || isOpponent())}
-          <span class="text-sm text-text-3 font-semibold">Need help resolving?</span>
-          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-lime text-white rounded-md hover:bg-lime-hover active:scale-95 transition-all duration-150 cursor-pointer border-none" onclick={doSettle} disabled={acting}>
+          <span class="text-sm text-text-3 font-semibold">Resolve via official event result:</span>
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-lime text-white rounded-md hover:bg-lime-hover active:scale-95 transition-all duration-150 cursor-pointer border-none" onclick={() => doSettle('event_result')} disabled={acting}>
             <Trophy size={16} />
+            Auto-settle
+          </button>
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 hover:border-border-strong active:scale-95 transition-all duration-150 cursor-pointer" onclick={() => doSettle('disputed')} disabled={acting}>
             Mark Disputed
           </button>
         {/if}
