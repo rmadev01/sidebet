@@ -1,8 +1,11 @@
 import { writable } from 'svelte/store';
 
+import type { AuthSessionUser } from '$lib/api';
+
 // Auth state
-export const user = writable<any>(null);
+export const user = writable<AuthSessionUser | null>(null);
 export const isAuthenticated = writable(false);
+export const authReady = writable(false);
 
 // Coin balance
 export const coinBalance = writable(0);

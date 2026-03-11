@@ -1,19 +1,22 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
-  import { user, isAuthenticated, coinBalance } from '$lib/stores';
-  import { getSession, getBalance } from '$lib/api';
+  import { goto } from '$app/navigation';
+  import { authReady, coinBalance, isAuthenticated, user } from '$lib/stores';
+  import { getBalance, getSession, signOut } from '$lib/api';
   import { page } from '$app/stores';
+  import { LayoutDashboard, Zap, Rss, Hexagon, Users, UserCircle, Coins, Plus, Menu, X } from 'lucide-svelte';
 
   let { children } = $props();
   let mobileOpen = $state(false);
 
   const nav = [
-    { href: '/', label: 'Dashboard' },
-    { href: '/events', label: 'Events' },
-    { href: '/bets', label: 'Bets' },
-    { href: '/friends', label: 'Friends' },
-    { href: '/profile', label: 'Profile' },
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/events', label: 'Events', icon: Zap },
+    { href: '/feed', label: 'Feed', icon: Rss },
+    { href: '/bets', label: 'Bets', icon: Hexagon },
+    { href: '/friends', label: 'Friends', icon: Users },
+    { href: '/profile', label: 'Profile', icon: UserCircle }
   ];
 
   onMount(async () => {
@@ -25,9 +28,21 @@
         try {
           const wallet = await getBalance();
           coinBalance.set(wallet.coin_balance);
-        } catch { /* wallet fetch fails if not authed yet */ }
+        } catch {
+          coinBalance.set(0);
+        }
+      } else {
+        user.set(null);
+        isAuthenticated.set(false);
+        coinBalance.set(0);
       }
-    } catch { /* not logged in */ }
+    } catch {
+      user.set(null);
+      isAuthenticated.set(false);
+      coinBalance.set(0);
+    } finally {
+      authReady.set(true);
+    }
   });
 
   function isActive(href: string): boolean {
@@ -40,188 +55,97 @@
     if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
     return n.toLocaleString();
   }
+
+  async function handleSignOut() {
+    await signOut();
+    user.set(null);
+    isAuthenticated.set(false);
+    coinBalance.set(0);
+    authReady.set(true);
+    mobileOpen = false;
+    goto('/login');
+  }
 </script>
 
-<div class="app">
-  <!-- Top Navigation -->
-  <header class="topnav">
-    <div class="topnav-inner">
-      <a href="/" class="wordmark">SIDEBET</a>
+<div class="min-h-screen flex flex-col">
+  <header class="sticky top-0 z-50 bg-surface border-b border-border">
+    <div class="max-w-[1200px] mx-auto px-6 h-14 flex items-center justify-between gap-8">
+      <a href="/" class="font-display text-[1.0625rem] font-bold tracking-[0.08em] text-lime no-underline shrink-0 hover:text-lime-hover transition-colors duration-150">
+        SIDEBET
+      </a>
 
-      <nav class="nav-links" class:open={mobileOpen}>
+      <nav class="hidden md:flex items-center gap-1">
         {#each nav as item}
           <a
             href={item.href}
-            class="nav-link"
-            class:active={isActive(item.href)}
+            class="flex items-center gap-1.5 text-[0.8125rem] font-medium no-underline px-3.5 py-1.5 rounded-md transition-all duration-150
+              {isActive(item.href)
+                ? 'text-text-1 bg-raised'
+                : 'text-text-3 hover:text-text-2 hover:bg-raised'}"
             onclick={() => mobileOpen = false}
-          >{item.label}</a>
+          >
+            <svelte:component this={item.icon} size={15} strokeWidth={2} />
+            {item.label}
+          </a>
         {/each}
       </nav>
 
-      <div class="nav-right">
+      <div class="flex items-center gap-2.5 shrink-0">
         {#if $isAuthenticated}
-          <span class="coin-badge" title="Your coin balance">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="var(--lime)" opacity="0.2"/><circle cx="12" cy="12" r="6" fill="var(--lime)"/></svg>
-            <span class="coin-bal">{formatCoins($coinBalance)}</span>
+          <span class="flex items-center gap-1.5 bg-lime-dim px-2.5 py-1 rounded-full font-mono text-xs font-bold text-lime-hover cursor-default" title="Your coin balance">
+            <Coins size={14} strokeWidth={2.5} />
+            <span class="leading-none">{formatCoins($coinBalance)}</span>
           </span>
-          <a href="/bets/new" class="btn btn-primary btn-sm">New Bet</a>
-          <a href="/profile" class="av av-1 av--sm">
+          <a href="/bets/new" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150 whitespace-nowrap">
+            <Plus size={14} strokeWidth={2.5} />
+            New Bet
+          </a>
+          <a href="/profile" aria-label="Open profile" class="w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-[0.625rem] text-white bg-lime shrink-0 no-underline">
             {$user?.name?.[0]?.toUpperCase() || '?'}
           </a>
+          <button class="hidden md:inline-flex items-center justify-center px-3 py-1.5 font-display text-xs font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 active:scale-95 transition-all duration-150 cursor-pointer" onclick={handleSignOut}>
+            Sign Out
+          </button>
         {:else}
-          <a href="/login" class="btn btn-primary btn-sm">Sign In</a>
+          <a href="/login" class="inline-flex items-center justify-center px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150">Sign In</a>
         {/if}
-        <button class="burger" onclick={() => mobileOpen = !mobileOpen} aria-label="Menu">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            {#if mobileOpen}
-              <path d="M18 6L6 18M6 6l12 12"/>
-            {:else}
-              <path d="M3 12h18M3 6h18M3 18h18"/>
-            {/if}
-          </svg>
+        <button class="flex md:hidden w-[34px] h-[34px] items-center justify-center bg-transparent border border-border rounded-md text-text-2 cursor-pointer" onclick={() => mobileOpen = !mobileOpen} aria-label="Menu">
+          {#if mobileOpen}
+            <X size={18} />
+          {:else}
+            <Menu size={18} />
+          {/if}
         </button>
       </div>
     </div>
+
+    {#if mobileOpen}
+      <nav class="md:hidden flex flex-col gap-0.5 px-4 py-3 border-t border-border bg-surface animate-enter">
+        {#each nav as item}
+          <a
+            href={item.href}
+            class="flex items-center gap-2 text-[0.8125rem] font-medium no-underline w-full px-3.5 py-2.5 rounded-md transition-all duration-150
+              {isActive(item.href)
+                ? 'text-text-1 bg-raised'
+                : 'text-text-3 hover:text-text-2 hover:bg-raised'}"
+            onclick={() => mobileOpen = false}
+          >
+            <svelte:component this={item.icon} size={16} strokeWidth={2} />
+            {item.label}
+          </a>
+        {/each}
+        {#if $isAuthenticated}
+          <button class="flex items-center gap-2 text-[0.8125rem] font-medium w-full px-3.5 py-2.5 rounded-md transition-all duration-150 cursor-pointer border border-border bg-transparent text-text-3 hover:text-text-2 hover:bg-raised" onclick={handleSignOut}>
+            Sign Out
+          </button>
+        {/if}
+      </nav>
+    {/if}
   </header>
 
-  <!-- Main -->
-  <main class="main">
-    <div class="page-w">
+  <main class="flex-1 py-9 pb-16 max-md:py-6 max-md:pb-12">
+    <div class="max-w-[1200px] mx-auto px-6 max-sm:px-4">
       {@render children()}
     </div>
   </main>
 </div>
-
-<style>
-  .app {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* ── Top Nav ── */
-  .topnav {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: hsla(230, 20%, 6%, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .topnav-inner {
-    max-width: var(--max-w);
-    margin: 0 auto;
-    padding: 0 24px;
-    height: var(--nav-height);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 32px;
-  }
-
-  .wordmark {
-    font-family: var(--font-display);
-    font-size: 1.0625rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--lime);
-    text-decoration: none;
-    flex-shrink: 0;
-  }
-  .wordmark:hover { color: var(--lime-hover); }
-
-  .nav-links {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .nav-link {
-    font-family: var(--font-body);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--text-3);
-    text-decoration: none;
-    padding: 6px 14px;
-    border-radius: var(--r-md);
-    transition: all var(--dur-fast) var(--ease-out);
-  }
-  .nav-link:hover {
-    color: var(--text-2);
-    background: var(--bg-raised);
-  }
-  .nav-link.active {
-    color: var(--text-1);
-    background: var(--bg-hover);
-  }
-
-  .nav-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-
-  .coin-badge {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    background: var(--lime-dim);
-    padding: 4px 10px;
-    border-radius: var(--r-full);
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--lime);
-    cursor: default;
-  }
-  .coin-bal { line-height: 1; }
-
-  .burger {
-    display: none;
-    width: 34px;
-    height: 34px;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    color: var(--text-2);
-    cursor: pointer;
-  }
-
-  /* ── Main ── */
-  .main {
-    flex: 1;
-    padding: 36px 0 64px;
-  }
-
-  /* ── Mobile ── */
-  @media (max-width: 720px) {
-    .burger { display: flex; }
-
-    .nav-links {
-      display: none;
-      position: absolute;
-      top: var(--nav-height);
-      left: 0;
-      right: 0;
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border);
-      flex-direction: column;
-      padding: 12px 16px;
-      gap: 2px;
-    }
-    .nav-links.open { display: flex; }
-
-    .nav-link {
-      width: 100%;
-      padding: 10px 14px;
-    }
-
-    .main { padding: 24px 0 48px; }
-  }
-</style>

@@ -1,25 +1,31 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { isAuthenticated, user, coinBalance } from '$lib/stores';
-  import { getBet, acceptBet, declineBet, cancelBet, settleBet, getUser } from '$lib/api';
+  import { coinBalance, isAuthenticated, user } from '$lib/stores';
+  import { runWhenAuthResolved } from '$lib/auth';
+  import { getBet, acceptBet, declineBet, cancelBet, settleBet, takeBet, type Bet } from '$lib/api';
+  import { goto } from '$app/navigation';
+  import { ArrowLeft, Trophy, Calendar, Check, X, Ban, Swords } from 'lucide-svelte';
 
-  let bet = $state<any>(null);
-  let creator = $state<any>(null);
-  let opponent = $state<any>(null);
+  let bet = $state<Bet | null>(null);
   let loading = $state(true);
   let acting = $state(false);
   let error = $state('');
 
-  $effect(() => {
-    load();
+  onMount(() => {
+    return runWhenAuthResolved(load, async () => {
+      bet = null;
+      loading = false;
+      error = '';
+    });
   });
 
   async function load() {
     loading = true;
     try {
-      bet = await getBet($page.params.id);
-      // Fetch user details in parallel — these are UUIDs so use the bet data
+      const id = $page.params.id;
+      if (!id) { error = 'No bet ID'; loading = false; return; }
+      bet = await getBet(id);
     } catch (e: any) {
       error = e.message;
     }
@@ -29,45 +35,68 @@
   function formatCoins(n: number) { return n?.toLocaleString() ?? '0'; }
   function isCreator() { return bet?.creator_id === $user?.id; }
   function isOpponent() { return bet?.opponent_id === $user?.id; }
+  function canTakeOpenBet() { return !!bet && bet.status === 'open' && !isCreator(); }
 
   async function doAccept() {
+    if (!bet) return;
+    const current = bet;
     acting = true;
     error = '';
     try {
-      bet = await acceptBet(bet.id);
-      coinBalance.update(b => b - bet.amount);
+      bet = await acceptBet(current.id);
+      coinBalance.update(b => b - current.amount);
     } catch (e: any) { error = e.message; }
     acting = false;
   }
 
   async function doDecline() {
+    if (!bet) return;
+    const current = bet;
     acting = true;
     error = '';
     try {
-      await declineBet(bet.id);
-      bet.status = 'declined';
+      await declineBet(current.id);
+      bet = { ...current, status: 'declined' };
     } catch (e: any) { error = e.message; }
     acting = false;
   }
 
   async function doCancel() {
+    if (!bet) return;
+    const current = bet;
     acting = true;
     error = '';
     try {
-      await cancelBet(bet.id);
-      bet.status = 'cancelled';
-      coinBalance.update(b => b + bet.amount);
+      await cancelBet(current.id);
+      bet = { ...current, status: 'cancelled' };
+      coinBalance.update(b => b + current.amount);
     } catch (e: any) { error = e.message; }
     acting = false;
   }
 
-  async function doSettle(winner: string) {
+  async function doSettle() {
+    if (!bet) return;
+    const current = bet;
     acting = true;
     error = '';
     try {
-      bet = await settleBet(bet.id, winner);
+      bet = await settleBet(current.id, 'disputed');
     } catch (e: any) { error = e.message; }
     acting = false;
+  }
+
+  async function doTakeOpen() {
+    if (!bet) return;
+    acting = true;
+    error = '';
+    try {
+      const updated = await takeBet(bet.id);
+      coinBalance.update((b) => b - updated.amount);
+      goto(`/bets/${updated.id}`);
+    } catch (e: any) {
+      error = e.message;
+      acting = false;
+    }
   }
 </script>
 
@@ -75,217 +104,118 @@
   <title>Bet Details — SideBet</title>
 </svelte:head>
 
-<div class="bet-detail">
+<div class="max-w-2xl">
   {#if loading}
-    <p class="empty-state">Loading…</p>
+    <p class="text-text-3 text-sm py-10 text-center">Loading…</p>
+  {:else if !$isAuthenticated}
+    <div class="text-center py-10">
+      <p class="text-text-3 mb-4">Sign in to view or respond to this bet.</p>
+      <a href="/login?next=/bets/{$page.params.id}" class="inline-flex items-center justify-center px-5 py-2.5 font-display text-sm font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150">Sign In</a>
+    </div>
   {:else if !bet}
-    <p class="empty-state">Bet not found.</p>
+    <p class="text-text-3 text-sm py-10 text-center">Bet not found.</p>
   {:else}
-    <a href="/bets" class="back-link">← All Bets</a>
+    <a href="/bets" class="inline-flex items-center gap-1 mb-4 text-sm text-text-3 no-underline hover:text-text-2 transition-colors duration-150">
+      <ArrowLeft size={14} />
+      All Bets
+    </a>
 
-    <div class="detail-card">
+    <div class="bg-surface border border-border rounded-lg p-8 max-sm:p-5">
       <!-- Status Badge -->
-      <div class="status-row">
-        <span class="status-badge"
-          class:status--active={bet.status === 'active'}
-          class:status--proposed={bet.status === 'proposed'}
-          class:status--settled={bet.status === 'settled'}
-          class:status--cancelled={bet.status === 'cancelled' || bet.status === 'declined'}
-        >{bet.status.toUpperCase()}</span>
-        <span class="mono text-3">{new Date(bet.created_at).toLocaleDateString()}</span>
+      <div class="flex items-center justify-between mb-5">
+        <span class="text-[0.6875rem] font-bold tracking-widest px-2.5 py-1 rounded-sm
+          {bet.status === 'active' ? 'bg-sky-dim text-sky' : bet.status === 'proposed' ? 'bg-amber-dim text-amber' : bet.status === 'settled' ? 'bg-lime-dim text-lime' : bet.status === 'open' ? 'bg-sky-dim text-sky' : 'bg-raised text-text-3'}">{bet.status.toUpperCase()}</span>
+        <span class="flex items-center gap-1 font-mono text-text-3 text-sm">
+          <Calendar size={13} />
+          {new Date(bet.created_at).toLocaleDateString()}
+        </span>
       </div>
 
-      <h1 class="bet-question">{bet.question}</h1>
+      <h1 class="text-[1.375rem] font-bold leading-snug mb-6 font-display tracking-tight">{bet.question}</h1>
 
       <!-- Positions -->
-      <div class="positions">
-        <div class="pos-card" class:winner={bet.winner_id === bet.creator_id}>
-          <span class="pos-label">Creator</span>
-          <span class="pos-pick">{bet.creator_position}</span>
-          {#if bet.winner_id === bet.creator_id}<span class="winner-badge">🏆 Winner</span>{/if}
+      <div class="flex items-center gap-4 mb-6 max-sm:flex-col">
+        <div class="flex-1 bg-raised rounded-md p-4 text-center border-2 max-sm:w-full {bet.winner_id === bet.creator_id ? 'border-lime' : 'border-transparent'}">
+          <span class="block text-[0.6875rem] font-semibold uppercase text-text-3 mb-1.5">Creator</span>
+          <span class="block font-bold text-base text-text-1">{bet.creator_position}</span>
+          {#if bet.winner_id === bet.creator_id}<span class="inline-flex items-center gap-1 mt-1.5 text-xs text-lime"><Trophy size={12} /> Winner</span>{/if}
         </div>
-        <div class="pos-vs">vs</div>
-        <div class="pos-card" class:winner={bet.winner_id === bet.opponent_id}>
-          <span class="pos-label">Opponent</span>
-          <span class="pos-pick">{bet.opponent_position}</span>
-          {#if bet.winner_id === bet.opponent_id}<span class="winner-badge">🏆 Winner</span>{/if}
+        <div class="text-xs text-text-3 font-bold">vs</div>
+        <div class="flex-1 bg-raised rounded-md p-4 text-center border-2 max-sm:w-full {bet.winner_id === bet.opponent_id ? 'border-lime' : 'border-transparent'}">
+          <span class="block text-[0.6875rem] font-semibold uppercase text-text-3 mb-1.5">Opponent</span>
+          <span class="block font-bold text-base text-text-1">{bet.opponent_position}</span>
+          {#if bet.winner_id === bet.opponent_id}<span class="inline-flex items-center gap-1 mt-1.5 text-xs text-lime"><Trophy size={12} /> Winner</span>{/if}
         </div>
       </div>
 
-      <!-- Details -->
-      <div class="detail-grid">
-        <div class="detail-item">
-          <span class="detail-label">Wager</span>
-          <span class="detail-val mono">{formatCoins(bet.amount)} coins</span>
+      <!-- Details Grid -->
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6 p-4 bg-raised rounded-md">
+        <div class="text-center">
+          <span class="block text-[0.6875rem] font-semibold uppercase text-text-3 mb-1">Wager</span>
+          <span class="font-bold text-[0.9375rem] text-text-1 font-mono tabular-nums">{formatCoins(bet.amount)} coins</span>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">Odds</span>
-          <span class="detail-val mono">{bet.odds_numerator}:{bet.odds_denominator}</span>
+        <div class="text-center">
+          <span class="block text-[0.6875rem] font-semibold uppercase text-text-3 mb-1">Odds</span>
+          <span class="font-bold text-[0.9375rem] text-text-1 font-mono tabular-nums">{bet.odds_numerator}:{bet.odds_denominator}</span>
         </div>
-        <div class="detail-item">
-          <span class="detail-label">Expires</span>
-          <span class="detail-val">{new Date(bet.expires_at).toLocaleDateString()}</span>
+        <div class="text-center">
+          <span class="block text-[0.6875rem] font-semibold uppercase text-text-3 mb-1">Expires</span>
+          <span class="font-bold text-[0.9375rem] text-text-1">{new Date(bet.expires_at).toLocaleDateString()}</span>
         </div>
         {#if bet.resolved_at}
-          <div class="detail-item">
-            <span class="detail-label">Settled</span>
-            <span class="detail-val">{new Date(bet.resolved_at).toLocaleDateString()}</span>
+          <div class="text-center">
+            <span class="block text-[0.6875rem] font-semibold uppercase text-text-3 mb-1">Settled</span>
+            <span class="font-bold text-[0.9375rem] text-text-1">{new Date(bet.resolved_at).toLocaleDateString()}</span>
           </div>
         {/if}
       </div>
 
       {#if error}
-        <p class="error">{error}</p>
+        <p class="text-rose text-sm mb-3">{error}</p>
       {/if}
 
       <!-- Actions -->
-      <div class="actions">
+      <div class="flex items-center gap-2.5 flex-wrap">
         {#if bet.status === 'proposed' && isOpponent()}
-          <button class="btn btn-primary" onclick={doAccept} disabled={acting}>Accept</button>
-          <button class="btn btn-ghost" onclick={doDecline} disabled={acting}>Decline</button>
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-lime text-white rounded-md hover:bg-lime-hover active:scale-95 transition-all duration-150 cursor-pointer border-none" onclick={doAccept} disabled={acting}>
+            <Check size={16} />
+            Accept
+          </button>
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 hover:border-border-strong active:scale-95 transition-all duration-150 cursor-pointer" onclick={doDecline} disabled={acting}>
+            <X size={16} />
+            Decline
+          </button>
         {/if}
         {#if bet.status === 'proposed' && isCreator()}
-          <button class="btn btn-ghost" onclick={doCancel} disabled={acting}>Cancel</button>
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 hover:border-border-strong active:scale-95 transition-all duration-150 cursor-pointer" onclick={doCancel} disabled={acting}>
+            <Ban size={16} />
+            Cancel
+          </button>
+        {/if}
+        {#if bet.status === 'open' && isCreator()}
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 hover:border-border-strong active:scale-95 transition-all duration-150 cursor-pointer" onclick={doCancel} disabled={acting}>
+            <Ban size={16} />
+            Cancel
+          </button>
+        {/if}
+        {#if canTakeOpenBet()}
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-lime text-white rounded-md hover:bg-lime-hover active:scale-95 transition-all duration-150 cursor-pointer border-none" onclick={doTakeOpen} disabled={acting || $coinBalance < bet.amount}>
+            <Swords size={16} />
+            {#if $coinBalance < bet.amount}
+              Need {formatCoins(bet.amount)} coins
+            {:else}
+              Take Bet
+            {/if}
+          </button>
         {/if}
         {#if bet.status === 'active' && (isCreator() || isOpponent())}
-          <span class="settle-label">Settle as:</span>
-          <button class="btn btn-primary" onclick={() => doSettle('creator')} disabled={acting}>Creator Wins</button>
-          <button class="btn btn-ghost" onclick={() => doSettle('opponent')} disabled={acting}>Opponent Wins</button>
+          <span class="text-sm text-text-3 font-semibold">Need help resolving?</span>
+          <button class="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 font-display text-sm font-semibold bg-lime text-white rounded-md hover:bg-lime-hover active:scale-95 transition-all duration-150 cursor-pointer border-none" onclick={doSettle} disabled={acting}>
+            <Trophy size={16} />
+            Mark Disputed
+          </button>
         {/if}
       </div>
     </div>
   {/if}
 </div>
-
-<style>
-  .bet-detail { max-width: 640px; }
-
-  .back-link {
-    display: inline-block;
-    margin-bottom: 16px;
-    font-size: 0.875rem;
-    color: var(--text-3);
-    text-decoration: none;
-  }
-  .back-link:hover { color: var(--text-2); }
-
-  .detail-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 32px;
-  }
-
-  .status-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
-  .status-badge {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 4px 10px;
-    border-radius: var(--r-sm);
-  }
-  .status--active { background: var(--sky-dim); color: var(--sky); }
-  .status--proposed { background: var(--amber-dim); color: var(--amber); }
-  .status--settled { background: var(--lime-dim); color: var(--lime); }
-  .status--cancelled { background: var(--bg-raised); color: var(--text-3); }
-
-  .bet-question {
-    font-size: 1.375rem;
-    font-weight: 700;
-    margin-bottom: 24px;
-    line-height: 1.3;
-  }
-
-  .positions {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .pos-card {
-    flex: 1;
-    background: var(--bg-raised);
-    border-radius: var(--r-md);
-    padding: 16px;
-    text-align: center;
-    border: 2px solid transparent;
-  }
-  .pos-card.winner { border-color: var(--lime); }
-  .pos-label {
-    display: block;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    color: var(--text-3);
-    margin-bottom: 6px;
-  }
-  .pos-pick {
-    display: block;
-    font-weight: 700;
-    font-size: 1rem;
-    color: var(--text-1);
-  }
-  .pos-vs {
-    font-size: 0.75rem;
-    color: var(--text-3);
-    font-weight: 700;
-  }
-  .winner-badge {
-    display: inline-block;
-    margin-top: 6px;
-    font-size: 0.75rem;
-    color: var(--lime);
-  }
-
-  .detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-    padding: 16px;
-    background: var(--bg-raised);
-    border-radius: var(--r-md);
-  }
-  .detail-item { text-align: center; }
-  .detail-label {
-    display: block;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    color: var(--text-3);
-    margin-bottom: 4px;
-  }
-  .detail-val {
-    font-weight: 700;
-    font-size: 0.9375rem;
-    color: var(--text-1);
-  }
-
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .settle-label {
-    font-size: 0.875rem;
-    color: var(--text-3);
-    font-weight: 600;
-  }
-
-  .error {
-    color: var(--rose);
-    font-size: 0.875rem;
-    margin-bottom: 12px;
-  }
-
-  @media (max-width: 640px) {
-    .positions { flex-direction: column; }
-    .detail-card { padding: 20px; }
-  }
-</style>
