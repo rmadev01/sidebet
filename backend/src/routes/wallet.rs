@@ -57,35 +57,46 @@ pub async fn claim_daily_bonus(
     Extension(user): Extension<User>,
     Extension(pool): Extension<PgPool>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    // Check if eligible (> 24h since last bonus, or never claimed)
-    let eligible = user
-        .last_daily_bonus
-        .map(|t| Utc::now() - t > Duration::hours(24))
-        .unwrap_or(true);
-
-    if !eligible {
-        return Err(StatusCode::TOO_MANY_REQUESTS);
-    }
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let new_balance = sqlx::query_scalar::<_, i64>(
-        "UPDATE users SET coin_balance = coin_balance + $1, last_daily_bonus = NOW(), updated_at = NOW() WHERE id = $2 RETURNING coin_balance",
+        r#"
+        UPDATE users
+        SET coin_balance = coin_balance + $1,
+            last_daily_bonus = NOW(),
+            updated_at = NOW()
+        WHERE id = $2
+          AND (
+            last_daily_bonus IS NULL
+            OR last_daily_bonus < NOW() - INTERVAL '24 hours'
+          )
+        RETURNING coin_balance
+        "#,
     )
     .bind(DAILY_BONUS_AMOUNT)
     .bind(user.id)
-    .fetch_one(&pool)
+    .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::TOO_MANY_REQUESTS)?;
 
-    // Record transaction
-    let _ = sqlx::query(
+    sqlx::query(
         "INSERT INTO transactions (id, user_id, type, amount, balance_after, created_at) VALUES ($1, $2, 'daily_bonus', $3, $4, NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(user.id)
     .bind(DAILY_BONUS_AMOUNT)
     .bind(new_balance)
-    .execute(&pool)
-    .await;
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    tx.commit()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(DailyBonusResponse {
         coins_awarded: DAILY_BONUS_AMOUNT,

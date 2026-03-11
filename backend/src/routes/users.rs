@@ -76,6 +76,7 @@ pub async fn get_user_by_username(
 
 /// GET /api/users/search?q=
 pub async fn search_users(
+    Extension(user): Extension<User>,
     Extension(pool): Extension<PgPool>,
     Query(params): Query<SearchQuery>,
 ) -> Result<impl IntoResponse, StatusCode> {
@@ -83,8 +84,24 @@ pub async fn search_users(
     let pattern = format!("%{q}%");
 
     let users = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE username ILIKE $1 OR display_name ILIKE $1 LIMIT 20",
+        r#"
+        SELECT *
+        FROM users u
+        WHERE u.id != $1
+          AND (u.username ILIKE $2 OR u.display_name ILIKE $2)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM friendships f
+              WHERE (
+                  (f.requester_id = $1 AND f.addressee_id = u.id)
+                  OR (f.addressee_id = $1 AND f.requester_id = u.id)
+              )
+          )
+        ORDER BY u.username
+        LIMIT 20
+        "#,
     )
+    .bind(user.id)
     .bind(&pattern)
     .fetch_all(&pool)
     .await
