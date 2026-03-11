@@ -69,6 +69,31 @@ pub struct FriendRequest {
     pub user_id: Uuid,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct FriendSummary {
+    pub friendship_id: Uuid,
+    pub user_id: Uuid,
+    pub username: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub wins: i32,
+    pub losses: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct IncomingFriendRequest {
+    pub friendship_id: Uuid,
+    pub requester_id: Uuid,
+    pub username: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub wins: i32,
+    pub losses: i32,
+    pub created_at: DateTime<Utc>,
+}
+
 // ── Events ──
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -93,7 +118,7 @@ pub struct Event {
 pub struct Bet {
     pub id: Uuid,
     pub creator_id: Uuid,
-    pub opponent_id: Uuid,
+    pub opponent_id: Option<Uuid>,
     pub event_id: Option<Uuid>,
     pub question: String,
     pub creator_position: String,
@@ -113,7 +138,7 @@ pub struct Bet {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateBet {
-    pub opponent_id: Uuid,
+    pub opponent_id: Option<Uuid>,
     pub event_id: Option<Uuid>,
     pub question: String,
     pub creator_position: String,
@@ -204,6 +229,5 @@ pub struct DailyBonusResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct SettleBetRequest {
-    /// "creator" or "opponent"
-    pub winner: String,
+    pub outcome: String,
 }
