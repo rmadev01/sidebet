@@ -64,3 +64,54 @@ pub async fn get_feed(
 
     Ok(Json(items))
 }
+
+/// GET /api/feed/open — all open bets available for anyone to take
+pub async fn get_open_bets(
+    Extension(user): Extension<User>,
+    Extension(pool): Extension<PgPool>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let rows = sqlx::query_as::<_, OpenBetRow>(
+        r#"
+        SELECT b.*, u.username AS creator_username, u.display_name AS creator_display_name
+        FROM bets b
+        JOIN users u ON u.id = b.creator_id
+        WHERE b.status = 'open'
+          AND b.expires_at > NOW()
+          AND b.creator_id != $1
+        ORDER BY b.created_at DESC
+        LIMIT 50
+        "#,
+    )
+    .bind(user.id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(rows))
+}
+
+/// Extended bet row with creator info for the open feed
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct OpenBetRow {
+    pub id: uuid::Uuid,
+    pub creator_id: uuid::Uuid,
+    pub opponent_id: Option<uuid::Uuid>,
+    pub event_id: Option<uuid::Uuid>,
+    pub question: String,
+    pub creator_position: String,
+    pub opponent_position: String,
+    pub amount: i64,
+    pub odds_numerator: i32,
+    pub odds_denominator: i32,
+    pub reference_odds: Option<serde_json::Value>,
+    pub status: String,
+    pub winner_id: Option<uuid::Uuid>,
+    pub outcome: Option<String>,
+    pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    // Extra fields from JOIN
+    pub creator_username: String,
+    pub creator_display_name: String,
+}

@@ -1,27 +1,45 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { isAuthenticated } from '$lib/stores';
+  import { runWhenAuthResolved } from '$lib/auth';
   import { getBets } from '$lib/api';
+  import { Plus } from 'lucide-svelte';
 
   let activeBets = $state<any[]>([]);
   let proposedBets = $state<any[]>([]);
+  let openBets = $state<any[]>([]);
   let historyBets = $state<any[]>([]);
   let tab = $state('active');
   let loading = $state(true);
 
-  onMount(async () => {
-    if (!$isAuthenticated) { loading = false; return; }
-    try {
-      const [active, proposed, history] = await Promise.all([
-        getBets({ status: 'active' }).catch(() => []),
-        getBets({ status: 'proposed' }).catch(() => []),
-        getBets({ status: 'settled' }).catch(() => []),
-      ]);
-      activeBets = active;
-      proposedBets = proposed;
-      historyBets = history;
-    } catch { /* ignore */ }
-    loading = false;
+  onMount(() => {
+    return runWhenAuthResolved(async () => {
+      loading = true;
+      try {
+        const [active, proposed, open, history] = await Promise.all([
+          getBets({ status: 'active' }).catch(() => []),
+          getBets({ status: 'proposed' }).catch(() => []),
+          getBets({ status: 'open' }).catch(() => []),
+          getBets({ status: 'settled' }).catch(() => [])
+        ]);
+        activeBets = active;
+        proposedBets = proposed;
+        openBets = open;
+        historyBets = history;
+      } catch {
+        activeBets = [];
+        proposedBets = [];
+        openBets = [];
+        historyBets = [];
+      } finally {
+        loading = false;
+      }
+    }, async () => {
+      activeBets = [];
+      proposedBets = [];
+      openBets = [];
+      historyBets = [];
+      loading = false;
+    });
   });
 
   function formatCoins(n: number) { return n?.toLocaleString() ?? '0'; }
@@ -34,166 +52,69 @@
   function currentBets() {
     if (tab === 'active') return activeBets;
     if (tab === 'proposed') return proposedBets;
+    if (tab === 'open') return openBets;
     return historyBets;
   }
+
+  const tabs = [
+    { id: 'active', label: 'Active', count: () => activeBets.length },
+    { id: 'proposed', label: 'Proposed', count: () => proposedBets.length },
+    { id: 'open', label: 'Open', count: () => openBets.length },
+    { id: 'history', label: 'History', count: () => historyBets.length },
+  ];
 </script>
 
 <svelte:head>
   <title>My Bets — SideBet</title>
 </svelte:head>
 
-<div class="bets-page">
-  <div class="page-head">
-    <h1>My Bets</h1>
-    <a href="/bets/new" class="btn btn-primary btn-sm">+ New Bet</a>
+<div class="max-w-5xl">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-display tracking-tight">My Bets</h1>
+    <a href="/bets/new" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 font-display text-xs font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150">
+      <Plus size={14} strokeWidth={2.5} />
+      New Bet
+    </a>
   </div>
 
   <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab" class:active={tab === 'active'} onclick={() => tab = 'active'}>
-      Active <span class="tab-count">{activeBets.length}</span>
-    </button>
-    <button class="tab" class:active={tab === 'proposed'} onclick={() => tab = 'proposed'}>
-      Proposed <span class="tab-count">{proposedBets.length}</span>
-    </button>
-    <button class="tab" class:active={tab === 'history'} onclick={() => tab = 'history'}>
-      History <span class="tab-count">{historyBets.length}</span>
-    </button>
+  <div class="flex gap-0.5 mb-6 bg-raised/50 rounded-md p-0.5">
+    {#each tabs as t}
+      <button
+        class="flex-1 py-2 text-[0.8125rem] font-semibold rounded-sm flex items-center justify-center gap-1.5 transition-all duration-150 cursor-pointer min-h-11 border-none
+          {tab === t.id
+            ? 'bg-surface text-text-1 shadow-sm'
+            : 'bg-transparent text-text-3 hover:text-text-2'}"
+        onclick={() => tab = t.id}
+      >
+        {t.label}
+        <span class="font-mono text-[0.6875rem] opacity-60">{t.count()}</span>
+      </button>
+    {/each}
   </div>
 
   <!-- List -->
   {#if loading}
-    <p class="empty-state">Loading…</p>
+    <p class="text-text-3 text-sm py-8 text-center">Loading…</p>
   {:else if currentBets().length === 0}
-    <p class="empty-state">No bets here yet.</p>
+    <p class="text-text-3 text-sm py-8 text-center">No bets here yet.</p>
   {:else}
-    <div class="bet-list stagger">
+    <div class="stagger">
       {#each currentBets() as bet}
-        <a href="/bets/{bet.id}" class="bet-card accent-bar"
-          class:accent-bar--lime={bet.status === 'settled' && bet.outcome?.includes('creator')}
-          class:accent-bar--rose={bet.status === 'settled' && bet.outcome?.includes('opponent')}
-          class:accent-bar--sky={bet.status === 'active'}
-          class:accent-bar--amber={bet.status === 'proposed'}
-        >
-          <div class="bet-card-body">
-            <span class="bet-q">{bet.question}</span>
-            <span class="bet-meta">{bet.odds_numerator}:{bet.odds_denominator} · {timeAgo(bet.created_at)}</span>
+        <a href="/bets/{bet.id}" class="group flex items-center max-sm:flex-col max-sm:items-start justify-between gap-4 max-sm:gap-2 py-3.5 px-3.5 pl-5 border-b border-border no-underline text-inherit hover:bg-raised/50 transition-all duration-150 last:border-b-0 relative before:content-[''] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-sm
+          {bet.status === 'settled' && bet.outcome?.includes('creator') ? 'before:bg-lime' : bet.status === 'settled' && bet.outcome?.includes('opponent') ? 'before:bg-rose' : bet.status === 'active' || bet.status === 'open' ? 'before:bg-sky' : 'before:bg-amber'}">
+          <div class="flex-1 min-w-0">
+            <span class="block font-semibold text-[0.9375rem] mb-0.5 truncate">{bet.question}</span>
+            <span class="text-xs text-text-3">{bet.odds_numerator}:{bet.odds_denominator} · {timeAgo(bet.created_at)}</span>
           </div>
-          <div class="bet-card-right">
-            <span class="mono">{formatCoins(bet.amount)} coins</span>
-            <span class="tag"
-              class:tag--win={bet.outcome?.includes('win')}
-              class:tag--loss={bet.outcome?.includes('lose')}
-              class:tag--active={bet.status === 'active'}
-              class:tag--pending={bet.status === 'proposed'}
-            >{bet.status}</span>
+          <div class="flex items-center gap-3 shrink-0 max-sm:w-full max-sm:justify-between">
+            <span class="font-mono tabular-nums text-sm font-semibold">{formatCoins(bet.amount)} coins</span>
+            <span class="text-[0.6875rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-sm
+              {bet.outcome?.includes('win') ? 'bg-lime-dim text-lime' : bet.outcome?.includes('lose') ? 'bg-rose-dim text-rose' : bet.status === 'active' ? 'bg-sky-dim text-sky' : bet.status === 'proposed' ? 'bg-amber-dim text-amber' : 'bg-sky-dim text-sky'}">{bet.status}</span>
           </div>
         </a>
       {/each}
     </div>
   {/if}
 </div>
-
-<style>
-  .bets-page { max-width: 760px; }
-
-  .page-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 24px;
-  }
-  .page-head h1 { font-size: 1.5rem; }
-
-  .tabs {
-    display: flex;
-    gap: 2px;
-    margin-bottom: 24px;
-    background: var(--bg-sunken);
-    border-radius: var(--r-md);
-    padding: 2px;
-  }
-  .tab {
-    flex: 1;
-    padding: 8px 0;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--text-3);
-    background: none;
-    border: none;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    transition: all var(--dur-fast) var(--ease-out);
-  }
-  .tab:hover { color: var(--text-2); }
-  .tab.active { background: var(--bg-surface); color: var(--text-1); }
-  .tab-count {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    opacity: 0.6;
-  }
-
-  .empty-state {
-    color: var(--text-3);
-    font-size: 0.875rem;
-    padding: 32px 0;
-    text-align: center;
-  }
-
-  .bet-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 14px 14px 14px 18px;
-    border-bottom: 1px solid var(--border);
-    text-decoration: none;
-    color: inherit;
-    transition: background var(--dur-fast) var(--ease-out);
-  }
-  .bet-card:last-child { border-bottom: none; }
-  .bet-card:hover { background: var(--bg-raised); }
-
-  .bet-card-body { flex: 1; min-width: 0; }
-  .bet-q {
-    display: block;
-    font-weight: 600;
-    font-size: 0.9375rem;
-    margin-bottom: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .bet-meta { font-size: 0.75rem; color: var(--text-3); }
-
-  .bet-card-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .tag {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 2px 8px;
-    border-radius: var(--r-sm);
-  }
-  .tag--win { background: var(--lime-dim); color: var(--lime); }
-  .tag--loss { background: var(--rose-dim); color: var(--rose); }
-  .tag--active { background: var(--sky-dim); color: var(--sky); }
-  .tag--pending { background: var(--amber-dim); color: var(--amber); }
-
-  @media (max-width: 640px) {
-    .bet-card { flex-direction: column; align-items: flex-start; gap: 8px; }
-    .bet-card-right { width: 100%; justify-content: space-between; }
-  }
-</style>

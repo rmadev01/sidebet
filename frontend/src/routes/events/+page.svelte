@@ -1,190 +1,127 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getEvents } from '$lib/api';
+  import { authReady, isAuthenticated } from '$lib/stores';
+  import { getEvents, syncEvents } from '$lib/api';
+  import { RefreshCw, Calendar, Zap } from 'lucide-svelte';
 
   let events = $state<any[]>([]);
-  let category = $state('all');
+  let league = $state('all');
   let loading = $state(true);
+  let syncing = $state(false);
 
-  onMount(async () => {
+  const LEAGUES = [
+    { id: 'all', label: 'All' },
+    { id: 'nba', label: 'NBA' },
+    { id: 'nfl', label: 'NFL' },
+    { id: 'mlb', label: 'MLB' },
+    { id: 'nhl', label: 'NHL' },
+    { id: 'politics', label: 'Politics' },
+  ];
+
+  async function loadEvents() {
+    loading = true;
     try {
-      events = await getEvents();
+      const params: Record<string, string> = {};
+      if (league !== 'all') params.category = league;
+      const all = await getEvents(params);
+      events = all.filter((e: any) => e.status !== 'ended' && e.status !== 'cancelled');
     } catch { /* fallback to empty */ }
     loading = false;
-  });
-
-  function filtered() {
-    if (category === 'all') return events;
-    return events.filter(e => e.category === category);
   }
 
-  function categories() {
-    const cats = [...new Set(events.map(e => e.category))];
-    return ['all', ...cats];
+  async function handleSync() {
+    syncing = true;
+    try {
+      await syncEvents();
+      await loadEvents();
+    } catch { /* ignore */ }
+    syncing = false;
+  }
+
+  onMount(loadEvents);
+
+  function selectLeague(id: string) {
+    league = id;
+    loadEvents();
+  }
+
+  function statusBadge(status: string) {
+    if (status === 'live') return { text: 'LIVE', cls: 'live' };
+    if (status === 'ended' || status === 'finalized') return { text: 'FINAL', cls: 'ended' };
+    if (status === 'in_progress') return { text: 'IN PROGRESS', cls: 'live' };
+    return null;
   }
 </script>
 
 <svelte:head>
   <title>Events — SideBet</title>
-  <meta name="description" content="Browse events to bet on." />
+  <meta name="description" content="Browse live sports events and odds to bet on." />
 </svelte:head>
 
-<div class="events-page">
-  <div class="page-head">
-    <h1>Events</h1>
+<div>
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-display tracking-tight">Events</h1>
+    {#if $authReady && $isAuthenticated}
+      <button class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-[0.8125rem] font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 hover:border-border-strong active:scale-95 transition-all duration-150 cursor-pointer" onclick={handleSync} disabled={syncing}>
+        <RefreshCw size={14} class={syncing ? 'animate-spin' : ''} />
+        {syncing ? 'Syncing…' : 'Sync'}
+      </button>
+    {/if}
   </div>
 
-  <!-- Category tabs -->
-  <div class="tabs">
-    {#each categories() as cat}
-      <button class="tab" class:active={category === cat} onclick={() => category = cat}>
-        {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
-      </button>
+  <!-- League Tabs -->
+  <div class="flex gap-1.5 mb-6 flex-wrap">
+    {#each LEAGUES as l}
+      <button
+        class="px-4 py-1.5 text-[0.8125rem] font-semibold rounded-full cursor-pointer transition-all duration-150 min-h-11 border
+          {league === l.id
+            ? 'bg-lime-dim border-lime text-lime-hover'
+            : 'bg-raised border-border text-text-3 hover:text-text-2 hover:border-border-strong'}"
+        onclick={() => selectLeague(l.id)}
+      >{l.label}</button>
     {/each}
   </div>
 
   {#if loading}
-    <p class="empty-state">Loading…</p>
-  {:else if filtered().length === 0}
-    <p class="empty-state">No events available right now.</p>
+    <p class="text-text-3 text-sm py-10 text-center">Loading…</p>
+  {:else if events.length === 0}
+    <p class="text-text-3 text-sm py-10 text-center">No events available. Try syncing to pull the latest from SportsGameOdds.</p>
   {:else}
-    <div class="event-grid stagger">
-      {#each filtered() as event}
-        <div class="event-card animate-in">
-          <div class="ev-head">
-            <span class="ev-cat">{event.category}</span>
-            {#if event.status === 'live'}
-              <span class="ev-live"><span class="dot dot--live"></span>LIVE</span>
-            {:else}
-              <span class="ev-time">{event.starts_at ? new Date(event.starts_at).toLocaleDateString() : 'TBD'}</span>
-            {/if}
-          </div>
-          <h3 class="ev-title">{event.title}</h3>
-          {#if event.description}
-            <p class="ev-desc">{event.description}</p>
-          {/if}
-          {#if event.cached_odds && Object.keys(event.cached_odds).length > 0}
-            <div class="ev-odds">
-              {#each Object.entries(event.cached_odds) as [key, val]}
-                <span class="odd-tag">{key}: <span class="mono">{typeof val === 'number' ? val.toFixed(2) : val}</span></span>
-              {/each}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
+      {#each events as event}
+        <div class="bg-surface border border-border rounded-lg p-5 flex flex-col transition-all duration-200 hover:border-border-strong hover:shadow-sm animate-enter">
+          <!-- Event Header -->
+          <div class="flex items-center justify-between mb-2.5">
+            <span class="text-[0.6875rem] font-bold uppercase tracking-wide text-sky">{event.league || event.category}</span>
+            <div class="flex items-center gap-1.5">
+              {#if statusBadge(event.status)}
+                {@const badge = statusBadge(event.status)}
+                <span class="text-[0.6875rem] font-bold px-2 py-0.5 rounded-sm flex items-center gap-1
+                  {badge?.cls === 'live' ? 'text-rose bg-rose-dim' : 'text-text-3 bg-raised'}">
+                  {#if event.status === 'live'}<span class="w-1.5 h-1.5 rounded-full bg-rose animate-pulse-live inline-block"></span>{/if}
+                  {badge?.text}
+                </span>
+              {:else}
+                <span class="flex items-center gap-1 text-xs text-text-3">
+                  <Calendar size={12} />
+                  {event.starts_at ? new Date(event.starts_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'TBD'}
+                </span>
+              {/if}
             </div>
+          </div>
+
+          <h3 class="text-base font-bold leading-snug mb-1.5 font-display">{event.title}</h3>
+          {#if event.description}
+            <p class="text-[0.8125rem] text-text-3 leading-relaxed mb-3">{event.description}</p>
           {/if}
-          <a href="/bets/new?event={event.id}" class="btn btn-primary btn-sm ev-btn">Bet on this</a>
+
+          <a href="/bets/new?event={event.id}" class="mt-auto self-start inline-flex items-center justify-center gap-1.5 px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150">
+            <Zap size={12} />
+            Bet on this
+          </a>
         </div>
       {/each}
     </div>
   {/if}
 </div>
-
-<style>
-  .events-page { max-width: 860px; }
-
-  .page-head {
-    margin-bottom: 24px;
-  }
-  .page-head h1 { font-size: 1.5rem; }
-
-  .tabs {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-  }
-  .tab {
-    padding: 6px 16px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--text-3);
-    background: var(--bg-raised);
-    border: 1px solid var(--border);
-    border-radius: var(--r-full);
-    cursor: pointer;
-    transition: all var(--dur-fast) var(--ease-out);
-  }
-  .tab:hover { color: var(--text-2); border-color: var(--text-3); }
-  .tab.active { background: var(--lime-dim); border-color: var(--lime); color: var(--lime); }
-
-  .empty-state {
-    color: var(--text-3);
-    font-size: 0.875rem;
-    padding: 40px 0;
-    text-align: center;
-  }
-
-  .event-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-  }
-
-  .event-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    transition: border-color var(--dur-fast) var(--ease-out);
-  }
-  .event-card:hover { border-color: var(--text-3); }
-
-  .ev-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-  }
-  .ev-cat {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--sky);
-  }
-  .ev-live {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: var(--rose);
-  }
-  .ev-time {
-    font-size: 0.75rem;
-    color: var(--text-3);
-  }
-
-  .ev-title {
-    font-size: 1rem;
-    font-weight: 700;
-    margin-bottom: 6px;
-    line-height: 1.3;
-  }
-
-  .ev-desc {
-    font-size: 0.8125rem;
-    color: var(--text-3);
-    line-height: 1.4;
-    margin-bottom: 12px;
-  }
-
-  .ev-odds {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-  }
-  .odd-tag {
-    font-size: 0.75rem;
-    background: var(--bg-raised);
-    padding: 3px 8px;
-    border-radius: var(--r-sm);
-    color: var(--text-2);
-  }
-
-  .ev-btn {
-    margin-top: auto;
-    align-self: flex-start;
-  }
-</style>
