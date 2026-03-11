@@ -8,8 +8,9 @@ use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::config::Config;
 use crate::models::{Bet, CreateBet, Event, SettleBetRequest, User};
-use crate::services::notifications;
+use crate::services::{notifications, odds};
 
 #[derive(Deserialize)]
 pub struct BetFilters {
@@ -289,6 +290,7 @@ pub async fn cancel_bet(
 }
 
 pub async fn settle_bet(
+    Extension(cfg): Extension<Config>,
     Extension(user): Extension<User>,
     Extension(pool): Extension<PgPool>,
     Path(id): Path<Uuid>,
@@ -315,37 +317,63 @@ pub async fn settle_bet(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    if body.outcome != "disputed" {
-        return Err(StatusCode::BAD_REQUEST);
+    match body.outcome.as_str() {
+        "event_result" => settle_via_event_result(&cfg, &mut tx, &bet, opponent_id).await?,
+        "disputed" => dispute_bet(&mut tx, &bet, opponent_id).await?,
+        _ => return Err(StatusCode::BAD_REQUEST),
     }
-
-    let disputed_bet = sqlx::query_as::<_, Bet>(
-        "UPDATE bets SET status = 'disputed', outcome = 'disputed', resolved_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'active' RETURNING *",
-    )
-    .bind(bet.id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::CONFLICT)?;
-
-    let creator_balance = credit_user_balance(&mut tx, bet.creator_id, bet.amount).await?;
-    record_transaction(&mut tx, bet.creator_id, "bet_refund", bet.amount, creator_balance, Some(bet.id)).await?;
-
-    let opponent_balance = credit_user_balance(&mut tx, opponent_id, bet.amount).await?;
-    record_transaction(&mut tx, opponent_id, "bet_refund", bet.amount, opponent_balance, Some(bet.id)).await?;
 
     tx.commit()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let settled_bet = sqlx::query_as::<_, Bet>("SELECT * FROM bets WHERE id = $1")
+        .bind(bet.id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if body.outcome == "disputed" {
+        notifications::create_notification(
+            &pool,
+            bet.creator_id,
+            "bet_refund",
+            serde_json::json!({
+                "bet_id": bet.id,
+                "question": bet.question,
+                "reason": "disputed",
+            }),
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        notifications::create_notification(
+            &pool,
+            opponent_id,
+            "bet_refund",
+            serde_json::json!({
+                "bet_id": bet.id,
+                "question": bet.question,
+                "reason": "disputed",
+            }),
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        return Ok(Json(settled_bet));
+    }
+
+    let winner_id = settled_bet.winner_id.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let loser_id = if winner_id == bet.creator_id { opponent_id } else { bet.creator_id };
+
     notifications::create_notification(
         &pool,
-        bet.creator_id,
-        "bet_refund",
+        winner_id,
+        "bet_won",
         serde_json::json!({
             "bet_id": bet.id,
             "question": bet.question,
-            "reason": "disputed",
+            "amount_won": bet.amount * 2,
         }),
     )
     .await
@@ -353,18 +381,162 @@ pub async fn settle_bet(
 
     notifications::create_notification(
         &pool,
-        opponent_id,
-        "bet_refund",
+        loser_id,
+        "bet_lost",
         serde_json::json!({
             "bet_id": bet.id,
             "question": bet.question,
-            "reason": "disputed",
+            "amount_lost": bet.amount,
         }),
     )
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(disputed_bet))
+    Ok(Json(settled_bet))
+}
+
+async fn settle_via_event_result(
+    cfg: &Config,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    bet: &Bet,
+    opponent_id: Uuid,
+) -> Result<(), StatusCode> {
+    if cfg.sportsgameodds_api_key.is_empty() {
+        return Err(StatusCode::CONFLICT);
+    }
+
+    let event_id = bet.event_id.ok_or(StatusCode::BAD_REQUEST)?;
+    let event = sqlx::query_as::<_, Event>("SELECT * FROM events WHERE id = $1")
+        .bind(event_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    let sgo_id = event
+        .external_ids
+        .get("sportsgameodds")
+        .and_then(|value| value.as_str())
+        .ok_or(StatusCode::CONFLICT)?;
+
+    let sgo_event = odds::fetch_sportsgameodds_event(&cfg.sportsgameodds_api_key, sgo_id)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?
+        .ok_or(StatusCode::CONFLICT)?;
+
+    let (winner_id, loser_id, outcome) = determine_settlement_from_event(bet, opponent_id, &sgo_event)
+        .ok_or(StatusCode::CONFLICT)?;
+    let total_pot = bet.amount * 2;
+
+    sqlx::query_as::<_, Bet>(
+        "UPDATE bets SET status = 'settled', winner_id = $1, outcome = $2, resolved_at = NOW(), updated_at = NOW() WHERE id = $3 AND status = 'active' RETURNING *",
+    )
+    .bind(winner_id)
+    .bind(outcome)
+    .bind(bet.id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::CONFLICT)?;
+
+    let winner_new_balance = credit_user_balance(tx, winner_id, total_pot).await?;
+    sqlx::query("UPDATE users SET wins = wins + 1, updated_at = NOW() WHERE id = $1")
+        .bind(winner_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    record_transaction(tx, winner_id, "bet_won", total_pot, winner_new_balance, Some(bet.id)).await?;
+
+    sqlx::query("UPDATE users SET losses = losses + 1, updated_at = NOW() WHERE id = $1")
+        .bind(loser_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(())
+}
+
+async fn dispute_bet(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    bet: &Bet,
+    opponent_id: Uuid,
+) -> Result<(), StatusCode> {
+    sqlx::query_as::<_, Bet>(
+        "UPDATE bets SET status = 'disputed', outcome = 'disputed', resolved_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'active' RETURNING *",
+    )
+    .bind(bet.id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::CONFLICT)?;
+
+    let creator_balance = credit_user_balance(tx, bet.creator_id, bet.amount).await?;
+    record_transaction(tx, bet.creator_id, "bet_refund", bet.amount, creator_balance, Some(bet.id)).await?;
+
+    let opponent_balance = credit_user_balance(tx, opponent_id, bet.amount).await?;
+    record_transaction(tx, opponent_id, "bet_refund", bet.amount, opponent_balance, Some(bet.id)).await?;
+
+    Ok(())
+}
+
+fn determine_settlement_from_event(
+    bet: &Bet,
+    opponent_id: Uuid,
+    sgo_event: &odds::SgoEvent,
+) -> Option<(Uuid, Uuid, &'static str)> {
+    let teams = sgo_event.teams.as_ref()?;
+    let away = teams.away.as_ref()?;
+    let home = teams.home.as_ref()?;
+    let away_score = away.score?;
+    let home_score = home.score?;
+
+    if (away_score - home_score).abs() < f64::EPSILON {
+        return None;
+    }
+
+    let winning_aliases = if away_score > home_score {
+        team_aliases(away)
+    } else {
+        team_aliases(home)
+    };
+
+    let creator_pick = normalize_label(&bet.creator_position);
+    let opponent_pick = normalize_label(&bet.opponent_position);
+
+    if winning_aliases.iter().any(|alias| alias == &creator_pick) {
+        return Some((bet.creator_id, opponent_id, "creator_wins"));
+    }
+
+    if winning_aliases.iter().any(|alias| alias == &opponent_pick) {
+        return Some((opponent_id, bet.creator_id, "opponent_wins"));
+    }
+
+    None
+}
+
+fn team_aliases(team: &odds::SgoTeam) -> Vec<String> {
+    let mut aliases = Vec::new();
+
+    if let Some(names) = team.names.as_ref() {
+        for value in [&names.long, &names.medium, &names.short] {
+            if let Some(name) = value.as_deref() {
+                let normalized = normalize_label(name);
+                if !normalized.is_empty() && !aliases.iter().any(|alias| alias == &normalized) {
+                    aliases.push(normalized);
+                }
+            }
+        }
+    }
+
+    aliases
+}
+
+fn normalize_label(value: &str) -> String {
+    value
+        .to_ascii_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub async fn take_open_bet(

@@ -1,70 +1,117 @@
 # SideBet
 
-Peer-to-peer social betting on NBA and politics. Bets are settled trustlessly using UMA's Optimistic Oracle V3 on Base.
+SideBet is a social sweepstakes betting app for sports and events. It runs as three services sharing one Postgres database:
 
-## Architecture
+- `frontend/` - SvelteKit UI
+- `backend/` - Rust + Axum API
+- `auth-sidecar/` - Better Auth on Bun
 
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   SvelteKit  │───▶│  Rust/Axum   │───▶│  PostgreSQL  │
-│   Frontend   │    │   Backend    │    │   Database   │
-└──────┬───────┘    └──────┬───────┘    └──────────────┘
-       │                   │
-       │            ┌──────┴───────┐    ┌──────────────┐
-       │            │ Better Auth  │    │    Redis     │
-       │            │  (Bun sidecar)│    │   (cache)    │
-       │            └──────────────┘    └──────────────┘
-       │
-       ▼
-┌──────────────┐    ┌──────────────┐
-│  SideBet.sol │───▶│  UMA Oracle  │
-│  (Base L2)   │    │    (OOv3)    │
-└──────────────┘    └──────────────┘
-```
+All betting uses virtual coins only. No real money and no crypto settlement.
 
-## Stack
+## Production shape
 
-| Layer | Technology |
-|---|---|
-| Backend | Rust + Axum |
-| Database | PostgreSQL (sqlx) |
-| Cache | Redis |
-| Auth | Better Auth (Bun sidecar) |
-| Frontend | SvelteKit + vanilla CSS |
-| Contracts | Solidity + Foundry |
-| Chain | Base (Coinbase L2) |
+Recommended topology:
 
-## Quick Start
+- `frontend` served on the public app origin
+- `backend` on the API origin
+- `auth-sidecar` on the auth origin
+- all services share the same Postgres database
+
+For easiest cookie handling in production, keep the services behind the same parent domain and set `AUTH_COOKIE_DOMAIN` when you need cross-subdomain cookies.
+
+## Required secrets and keys
+
+Copy `.env.example` to `.env` and replace the placeholders for:
+
+- `DATABASE_URL`
+- `AUTH_SECRET`
+- `SPORTSGAMEODDS_API_KEY`
+- optional social login keys if you enable Google or Discord auth
+
+## Local development
+
+1. Create env file
 
 ```bash
-# 1. Copy env
 cp .env.example .env
-# Edit .env with your credentials
+```
 
-# 2. Database
+2. Start Postgres
+
+```bash
 createdb sidebet
-cd backend && cargo sqlx migrate run
-
-# 3. Auth sidecar
-cd auth-sidecar && bun install && bun run src/index.ts
-
-# 4. Backend
-cd backend && cargo run
-
-# 5. Frontend
-cd frontend && npm install && npm run dev
 ```
 
-## Project Structure
+3. Start auth sidecar
 
-```
-sidebet/
-├── backend/          # Rust (Axum) API server
-├── auth-sidecar/     # Better Auth (Bun/Hono)
-├── contracts/        # Solidity (Foundry) — SideBet.sol
-└── frontend/         # SvelteKit app
+```bash
+cd auth-sidecar
+bun install
+bun run src/index.ts
 ```
 
-## License
+The auth sidecar auto-creates the Better Auth tables it needs on startup.
 
-MIT
+4. Start backend
+
+```bash
+cd backend
+cargo run
+```
+
+The backend auto-runs SQL migrations at startup.
+
+5. Start frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Verification
+
+Run the checks before shipping:
+
+```bash
+cd backend && cargo test
+cd frontend && npm run check
+cd frontend && npm run test:smoke
+cd auth-sidecar && npm install && npm run check
+```
+
+There is also an integration helper script at `scripts/seed_and_test.sh` for end-to-end local flow testing once all services are running.
+
+## Containerized startup
+
+Build and run the full stack with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Services exposed locally:
+
+- frontend: `http://localhost:5173`
+- backend: `http://localhost:3000`
+- auth: `http://localhost:3001`
+- postgres: `localhost:5432`
+
+## Current operational rules
+
+- auth requests are rate-limited in-process
+- backend mutating routes enforce origin checks for cookie-backed auth
+- active bets can only be resolved from event results or marked disputed for refund
+- event sync uses advisory locks and conflict-safe upserts
+
+## Notes for image-based deploys
+
+If your goal is "set a couple keys and spin up an image", the critical runtime inputs are:
+
+- one reachable Postgres instance
+- `AUTH_SECRET`
+- `SPORTSGAMEODDS_API_KEY`
+- correct public service URLs
+- optional `AUTH_COOKIE_DOMAIN` for shared cookies across subdomains
+
+Once those are present, the auth sidecar bootstraps auth tables and the backend bootstraps app migrations automatically.
