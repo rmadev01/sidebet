@@ -2,12 +2,13 @@
   import { onMount } from 'svelte';
   import { runWhenAuthResolved } from '$lib/auth';
   import { getBets } from '$lib/api';
+  import type { Bet } from '$lib/api';
   import { Plus } from 'lucide-svelte';
 
-  let activeBets = $state<any[]>([]);
-  let proposedBets = $state<any[]>([]);
-  let openBets = $state<any[]>([]);
-  let historyBets = $state<any[]>([]);
+  let activeBets = $state<Bet[]>([]);
+  let proposedBets = $state<Bet[]>([]);
+  let openBets = $state<Bet[]>([]);
+  let historyBets = $state<Bet[]>([]);
   let tab = $state('active');
   let loading = $state(true);
 
@@ -47,6 +48,21 @@
     const diff = Date.now() - new Date(d).getTime();
     const h = Math.floor(diff / 3600000);
     return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+  }
+
+  function statusTone(bet: Bet) {
+    if (bet.status === 'disputed') return 'bg-rose-dim text-rose';
+    if (bet.status === 'settled') return 'bg-lime-dim text-lime';
+    if (bet.status === 'active' || bet.status === 'open') return 'bg-sky-dim text-sky';
+    if (bet.status === 'proposed') return 'bg-amber-dim text-amber';
+    return 'bg-raised text-text-3';
+  }
+
+  function railTone(bet: Bet) {
+    if (bet.status === 'disputed') return 'before:bg-rose';
+    if (bet.status === 'settled') return 'before:bg-lime';
+    if (bet.status === 'active' || bet.status === 'open') return 'before:bg-sky';
+    return 'before:bg-amber';
   }
 
   function currentBets() {
@@ -103,7 +119,7 @@
     <div class="stagger">
       {#each currentBets() as bet}
         <a href="/bets/{bet.id}" class="group flex items-center max-sm:flex-col max-sm:items-start justify-between gap-4 max-sm:gap-2 py-3.5 px-3.5 pl-5 border-b border-border no-underline text-inherit hover:bg-raised/50 transition-all duration-150 last:border-b-0 relative before:content-[''] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-sm
-          {bet.status === 'settled' && bet.outcome?.includes('creator') ? 'before:bg-lime' : bet.status === 'settled' && bet.outcome?.includes('opponent') ? 'before:bg-rose' : bet.status === 'active' || bet.status === 'open' ? 'before:bg-sky' : 'before:bg-amber'}">
+          {railTone(bet)}">
           <div class="flex-1 min-w-0">
             <span class="block font-semibold text-[0.9375rem] mb-0.5 truncate">{bet.question}</span>
             <span class="text-xs text-text-3">{bet.odds_numerator}:{bet.odds_denominator} · {timeAgo(bet.created_at)}</span>
@@ -111,7 +127,7 @@
           <div class="flex items-center gap-3 shrink-0 max-sm:w-full max-sm:justify-between">
             <span class="font-mono tabular-nums text-sm font-semibold">{formatCoins(bet.amount)} coins</span>
             <span class="text-[0.6875rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-sm
-              {bet.outcome?.includes('win') ? 'bg-lime-dim text-lime' : bet.outcome?.includes('lose') ? 'bg-rose-dim text-rose' : bet.status === 'active' ? 'bg-sky-dim text-sky' : bet.status === 'proposed' ? 'bg-amber-dim text-amber' : 'bg-sky-dim text-sky'}">{bet.status}</span>
+              {statusTone(bet)}">{bet.status}</span>
           </div>
         </a>
       {/each}

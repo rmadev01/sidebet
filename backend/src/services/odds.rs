@@ -97,52 +97,14 @@ pub async fn fetch_polymarket_events() -> Result<Vec<PolymarketEvent>, OddsError
     Ok(events)
 }
 
-/// Fetch token price from Polymarket CLOB
-pub async fn fetch_polymarket_price(token_id: &str) -> Result<f64, OddsError> {
-    let client = http_client()?;
-    let url = format!("https://clob.polymarket.com/price?token_id={token_id}");
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| OddsError::Fetch(e.to_string()))?;
-
-    let body: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| OddsError::Parse(e.to_string()))?;
-
-    let price = body["price"]
-        .as_f64()
-        .unwrap_or(body.as_f64().unwrap_or(0.5));
-
-    Ok(price)
-}
-
-/// Convert Polymarket price (0-1 probability) to decimal odds
-pub fn probability_to_decimal_odds(prob: f64) -> f64 {
-    if prob <= 0.0 {
-        return 100.0;
-    }
-    1.0 / prob
-}
-
-/// Convert decimal odds to implied probability
-pub fn decimal_odds_to_probability(odds: f64) -> f64 {
-    if odds <= 0.0 {
-        return 0.0;
-    }
-    1.0 / odds
-}
-
 // ── Types ──
 
 #[derive(Debug, Deserialize)]
 struct SgoResponse {
-    success: Option<bool>,
+    _success: Option<bool>,
     data: Option<Vec<SgoEvent>>,
     #[serde(rename = "nextCursor")]
-    next_cursor: Option<String>,
+    _next_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
