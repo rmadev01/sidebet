@@ -90,6 +90,10 @@ Build and run the full stack with Docker Compose:
 docker compose up --build
 ```
 
+The frontend image reads `PUBLIC_API_URL`, `PUBLIC_AUTH_URL`, and `PUBLIC_WS_URL` at build time, so make sure they are set in the root `.env` before building.
+
+Compose overrides the backend and auth `DATABASE_URL` values to use the internal `postgres` hostname, so you can keep the root `.env` on localhost-oriented values for browser access while still using the same file for containers.
+
 Services exposed locally:
 
 - frontend: `http://localhost:5173`

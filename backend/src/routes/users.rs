@@ -8,6 +8,10 @@ use sqlx::PgPool;
 
 use crate::models::{PublicUser, UpdateProfile, User};
 
+const MAX_DISPLAY_NAME_LEN: usize = 64;
+const MAX_BIO_LEN: usize = 280;
+const MAX_AVATAR_URL_LEN: usize = 2048;
+
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
@@ -35,6 +39,8 @@ pub async fn update_me(
     Extension(pool): Extension<PgPool>,
     Json(body): Json<UpdateProfile>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    let update = normalize_profile_update(body)?;
+
     let updated = sqlx::query_as::<_, User>(
         r#"
         UPDATE users SET
@@ -46,9 +52,9 @@ pub async fn update_me(
         RETURNING *
         "#,
     )
-    .bind(&body.display_name)
-    .bind(&body.bio)
-    .bind(&body.avatar_url)
+    .bind(&update.display_name)
+    .bind(&update.bio)
+    .bind(&update.avatar_url)
     .bind(user.id)
     .fetch_one(&pool)
     .await
@@ -80,7 +86,11 @@ pub async fn search_users(
     Extension(pool): Extension<PgPool>,
     Query(params): Query<SearchQuery>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let q = params.q.unwrap_or_default();
+    let q = params.q.unwrap_or_default().trim().to_string();
+    if q.len() < 2 {
+        return Ok(Json(serde_json::json!([])));
+    }
+
     let pattern = format!("%{q}%");
 
     let users = sqlx::query_as::<_, User>(
@@ -109,4 +119,45 @@ pub async fn search_users(
 
     let public: Vec<PublicUser> = users.into_iter().map(PublicUser::from).collect();
     Ok(Json(serde_json::to_value(public).unwrap()))
+}
+
+fn normalize_profile_update(body: UpdateProfile) -> Result<UpdateProfile, StatusCode> {
+    let display_name = match body.display_name {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() || trimmed.len() > MAX_DISPLAY_NAME_LEN {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
+
+    let bio = match body.bio {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.len() > MAX_BIO_LEN {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
+
+    let avatar_url = match body.avatar_url {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.len() > MAX_AVATAR_URL_LEN {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
+
+    Ok(UpdateProfile {
+        display_name,
+        bio,
+        avatar_url,
+    })
 }

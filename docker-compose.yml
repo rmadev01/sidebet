@@ -5,6 +5,11 @@ services:
       POSTGRES_DB: sidebet
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sidebet"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:
@@ -17,7 +22,15 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sidebet
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3001/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     ports:
       - "3001:3001"
 
@@ -28,8 +41,17 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
-      - auth
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sidebet
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     ports:
       - "3000:3000"
 
@@ -37,11 +59,25 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3000}
+        PUBLIC_AUTH_URL: ${PUBLIC_AUTH_URL:-http://localhost:3001}
+        PUBLIC_WS_URL: ${PUBLIC_WS_URL:-ws://localhost:3000/api/ws}
     env_file:
       - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5173
     depends_on:
-      - backend
-      - auth
+      backend:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     ports:
       - "5173:5173"
 

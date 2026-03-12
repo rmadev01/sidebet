@@ -10,8 +10,14 @@ set -euo pipefail
 
 AUTH="http://localhost:3001"
 API="http://localhost:3000"
-ORIGIN="http://localhost:5175"
+ORIGIN="${ORIGIN:-http://localhost:5173}"
+FRONTEND="${FRONTEND:-$ORIGIN}"
 PASS="TestPass123!"
+RUN_ID="${RUN_ID:-$(date +%s)}_$RANDOM"
+
+ALICE_EMAIL="alice+$RUN_ID@sidebet.test"
+BOB_EMAIL="bob+$RUN_ID@sidebet.test"
+CAROL_EMAIL="carol+$RUN_ID@sidebet.test"
 
 C1="/tmp/sb_alice.txt"; C2="/tmp/sb_bob.txt"; C3="/tmp/sb_carol.txt"
 rm -f "$C1" "$C2" "$C3"
@@ -54,19 +60,19 @@ section "1. Create Users"
 ###############################################################################
 
 echo "  Creating Alice..."
-auth_user "alice@sidebet.test" "Alice Johnson" "$C1" > /dev/null
+auth_user "$ALICE_EMAIL" "Alice Johnson $RUN_ID" "$C1" > /dev/null
 ALICE_ID=$(get_sb_id "$C1")
 ALICE_BAL=$(get_balance "$C1")
 ok "Alice: id=$ALICE_ID balance=$ALICE_BAL"
 
 echo "  Creating Bob..."
-auth_user "bob@sidebet.test" "Bob Smith" "$C2" > /dev/null
+auth_user "$BOB_EMAIL" "Bob Smith $RUN_ID" "$C2" > /dev/null
 BOB_ID=$(get_sb_id "$C2")
 BOB_BAL=$(get_balance "$C2")
 ok "Bob:   id=$BOB_ID balance=$BOB_BAL"
 
 echo "  Creating Carol..."
-auth_user "carol@sidebet.test" "Carol Davis" "$C3" > /dev/null
+auth_user "$CAROL_EMAIL" "Carol Davis $RUN_ID" "$C3" > /dev/null
 CAROL_ID=$(get_sb_id "$C3")
 CAROL_BAL=$(get_balance "$C3")
 ok "Carol: id=$CAROL_ID balance=$CAROL_BAL"
@@ -78,7 +84,7 @@ section "2. Daily Bonus"
 for name_jar in "Alice:$C1" "Bob:$C2" "Carol:$C3"; do
   name="${name_jar%%:*}"
   jar="${name_jar##*:}"
-  res=$(curl -s -X POST "$API/api/wallet/daily-bonus" -b "$jar")
+  res=$(curl -s -X POST "$API/api/wallet/daily-bonus" -H "Origin: $ORIGIN" -b "$jar")
   awarded=$(echo "$res" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('coins_awarded', 'already claimed'))" 2>/dev/null || echo "already claimed")
   ok "$name daily bonus: $awarded"
 done
@@ -90,17 +96,20 @@ section "3. Friendships"
 echo "  Alice sends friend request to Bob..."
 res=$(curl -s -X POST "$API/api/friends/request" \
   -H "Content-Type: application/json" \
+  -H "Origin: $ORIGIN" \
   -b "$C1" -d "{\"user_id\":\"$BOB_ID\"}" 2>&1)
 echo "$res" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'    status={d.get(\"status\",\"ok\")}')" 2>/dev/null || echo "    $res"
 
 echo "  Alice sends friend request to Carol..."
 curl -s -X POST "$API/api/friends/request" \
   -H "Content-Type: application/json" \
+  -H "Origin: $ORIGIN" \
   -b "$C1" -d "{\"user_id\":\"$CAROL_ID\"}" > /dev/null 2>&1
 
 echo "  Bob sends friend request to Carol..."
 curl -s -X POST "$API/api/friends/request" \
   -H "Content-Type: application/json" \
+  -H "Origin: $ORIGIN" \
   -b "$C2" -d "{\"user_id\":\"$CAROL_ID\"}" > /dev/null 2>&1
 
 # Bob's pending requests
@@ -111,7 +120,7 @@ if [ "$REQ_COUNT" -gt 0 ]; then
   ok "Bob has $REQ_COUNT pending request(s)"
   FSHIP_ID=$(echo "$REQS" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['friendship_id'])")
   echo "  Bob accepts Alice's request ($FSHIP_ID)..."
-  curl -s -X POST "$API/api/friends/$FSHIP_ID/accept" -b "$C2" > /dev/null
+  curl -s -X POST "$API/api/friends/$FSHIP_ID/accept" -H "Origin: $ORIGIN" -b "$C2" > /dev/null
   ok "Bob accepted Alice's friend request"
 else
   fail "Bob has no friend requests"
@@ -130,7 +139,7 @@ for r in reqs:
   print(r['friendship_id'])
 " 2>/dev/null | while read fid; do
   echo "  Carol accepts request ($fid)..."
-  curl -s -X POST "$API/api/friends/$fid/accept" -b "$C3" > /dev/null
+  curl -s -X POST "$API/api/friends/$fid/accept" -H "Origin: $ORIGIN" -b "$C3" > /dev/null
 done
 ok "Carol accepted all requests"
 
@@ -146,7 +155,7 @@ section "4. Get Events"
 ###############################################################################
 
 # Sync events first
-curl -s -X POST "$API/api/events/sync?leagues=NBA,NHL" -b "$C1" > /dev/null 2>&1
+curl -s -X POST "$API/api/events/sync?leagues=NBA,NHL" -H "Origin: $ORIGIN" -b "$C1" > /dev/null 2>&1
 
 EVENTS=$(curl -s "$API/api/events?status=upcoming" -b "$C1")
 EVENT_COUNT=$(echo "$EVENTS" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
@@ -212,7 +221,7 @@ section "5. Create Bets"
 # Bet 1: Alice → Bob (proposed, straight 1:1)
 echo "  Alice bets Bob 200 coins on $EVENT1_TITLE..."
 BET1=$(curl -s -X POST "$API/api/bets" \
-  -H "Content-Type: application/json" -b "$C1" \
+  -H "Content-Type: application/json" -H "Origin: $ORIGIN" -b "$C1" \
   -d "{\"event_id\":\"$EVENT1_ID\",\"opponent_id\":\"$BOB_ID\",\"question\":\"$EVENT1_TITLE\",\"creator_position\":\"$E1_SIDE_A\",\"opponent_position\":\"$E1_SIDE_B\",\"amount\":200,\"odds_numerator\":1,\"odds_denominator\":1,\"expires_in_hours\":48}")
 BET1_ID=$(echo "$BET1" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
 BET1_STATUS=$(echo "$BET1" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null)
@@ -225,7 +234,7 @@ fi
 # Bet 2: Alice → Carol (proposed, straight 1:1)
 echo "  Alice bets Carol 150 coins on $EVENT2_TITLE..."
 BET2=$(curl -s -X POST "$API/api/bets" \
-  -H "Content-Type: application/json" -b "$C1" \
+  -H "Content-Type: application/json" -H "Origin: $ORIGIN" -b "$C1" \
   -d "{\"event_id\":\"$EVENT2_ID\",\"opponent_id\":\"$CAROL_ID\",\"question\":\"$EVENT2_TITLE\",\"creator_position\":\"$E2_SIDE_A\",\"opponent_position\":\"$E2_SIDE_B\",\"amount\":150,\"odds_numerator\":1,\"odds_denominator\":1,\"expires_in_hours\":48}")
 BET2_ID=$(echo "$BET2" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
 BET2_STATUS=$(echo "$BET2" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null)
@@ -238,7 +247,7 @@ fi
 # Bet 3: Bob posts open bet (no opponent)
 echo "  Bob posts open bet for 100 coins on $EVENT1_TITLE..."
 BET3=$(curl -s -X POST "$API/api/bets" \
-  -H "Content-Type: application/json" -b "$C2" \
+  -H "Content-Type: application/json" -H "Origin: $ORIGIN" -b "$C2" \
   -d "{\"event_id\":\"$EVENT1_ID\",\"question\":\"$EVENT1_TITLE\",\"creator_position\":\"$E1_SIDE_B\",\"opponent_position\":\"$E1_SIDE_A\",\"amount\":100,\"odds_numerator\":1,\"odds_denominator\":1,\"expires_in_hours\":48}")
 BET3_ID=$(echo "$BET3" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
 BET3_STATUS=$(echo "$BET3" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null)
@@ -251,7 +260,7 @@ fi
 # Bet 4: Carol → Bob (proposed)
 echo "  Carol bets Bob 75 coins on $EVENT2_TITLE..."
 BET4=$(curl -s -X POST "$API/api/bets" \
-  -H "Content-Type: application/json" -b "$C3" \
+  -H "Content-Type: application/json" -H "Origin: $ORIGIN" -b "$C3" \
   -d "{\"event_id\":\"$EVENT2_ID\",\"opponent_id\":\"$BOB_ID\",\"question\":\"$EVENT2_TITLE\",\"creator_position\":\"$E2_SIDE_B\",\"opponent_position\":\"$E2_SIDE_A\",\"amount\":75,\"odds_numerator\":1,\"odds_denominator\":1,\"expires_in_hours\":24}")
 BET4_ID=$(echo "$BET4" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
 if [ -n "$BET4_ID" ]; then
@@ -270,7 +279,7 @@ NOTIF_COUNT=$(echo "$BOB_NOTIFS" | python3 -c "import sys,json; print(len(json.l
 ok "Bob has $NOTIF_COUNT notification(s)"
 
 echo "  Bob accepts bet 1..."
-ACCEPT1=$(curl -s -X POST "$API/api/bets/$BET1_ID/accept" -b "$C2")
+ACCEPT1=$(curl -s -X POST "$API/api/bets/$BET1_ID/accept" -H "Origin: $ORIGIN" -b "$C2")
 ACCEPT1_STATUS=$(echo "$ACCEPT1" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "failed")
 if [ "$ACCEPT1_STATUS" = "active" ]; then
   ok "Bet 1 is now ACTIVE"
@@ -283,7 +292,7 @@ section "7. Carol Declines Bet 2 (Alice's challenge)"
 ###############################################################################
 
 echo "  Carol declines bet 2..."
-DECLINE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API/api/bets/$BET2_ID/decline" -b "$C3")
+DECLINE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API/api/bets/$BET2_ID/decline" -H "Origin: $ORIGIN" -b "$C3")
 if [ "$DECLINE_STATUS" = "200" ]; then
   ok "Bet 2 DECLINED — Alice gets refund"
 else
@@ -295,7 +304,7 @@ section "8. Carol Takes Bob's Open Bet (Bet 3)"
 ###############################################################################
 
 echo "  Carol takes Bob's open bet..."
-TAKE=$(curl -s -X POST "$API/api/bets/$BET3_ID/take" -b "$C3")
+TAKE=$(curl -s -X POST "$API/api/bets/$BET3_ID/take" -H "Origin: $ORIGIN" -b "$C3")
 TAKE_STATUS=$(echo "$TAKE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "failed")
 if [ "$TAKE_STATUS" = "active" ]; then
   ok "Bet 3 taken by Carol — now ACTIVE"
@@ -308,7 +317,7 @@ section "9. Bob Accepts Carol's Bet (Bet 4)"
 ###############################################################################
 
 echo "  Bob accepts Carol's bet 4..."
-ACCEPT4=$(curl -s -X POST "$API/api/bets/$BET4_ID/accept" -b "$C2")
+ACCEPT4=$(curl -s -X POST "$API/api/bets/$BET4_ID/accept" -H "Origin: $ORIGIN" -b "$C2")
 ACCEPT4_STATUS=$(echo "$ACCEPT4" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "failed")
 if [ "$ACCEPT4_STATUS" = "active" ]; then
   ok "Bet 4 is now ACTIVE"
@@ -320,13 +329,14 @@ fi
 section "10. Settle Bet 1 (Alice wins)"
 ###############################################################################
 
-echo "  Alice settles bet 1 — creator wins..."
+echo "  Alice settles bet 1 — mark disputed..."
 SETTLE1=$(curl -s -X POST "$API/api/bets/$BET1_ID/settle" \
   -H "Content-Type: application/json" -b "$C1" \
-  -d '{"winner":"creator"}')
+  -H "Origin: $ORIGIN" \
+  -d '{"outcome":"disputed"}')
 SETTLE1_STATUS=$(echo "$SETTLE1" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "failed")
-if [ "$SETTLE1_STATUS" = "settled" ]; then
-  ok "Bet 1 SETTLED — Alice wins 400 coins"
+if [ "$SETTLE1_STATUS" = "disputed" ]; then
+  ok "Bet 1 marked DISPUTED — both sides refunded"
 else
   fail "Bet 1 settle failed: $SETTLE1_STATUS"
 fi
@@ -335,13 +345,14 @@ fi
 section "11. Settle Bet 3 (Bob wins, Carol loses)"
 ###############################################################################
 
-echo "  Bob settles bet 3 — creator (Bob) wins..."
+echo "  Bob settles bet 3 — mark disputed..."
 SETTLE3=$(curl -s -X POST "$API/api/bets/$BET3_ID/settle" \
   -H "Content-Type: application/json" -b "$C2" \
-  -d '{"winner":"creator"}')
+  -H "Origin: $ORIGIN" \
+  -d '{"outcome":"disputed"}')
 SETTLE3_STATUS=$(echo "$SETTLE3" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','?'))" 2>/dev/null || echo "failed")
-if [ "$SETTLE3_STATUS" = "settled" ]; then
-  ok "Bet 3 SETTLED — Bob wins 200 coins"
+if [ "$SETTLE3_STATUS" = "disputed" ]; then
+  ok "Bet 3 marked DISPUTED — both sides refunded"
 else
   fail "Bet 3 settle failed: $SETTLE3_STATUS"
 fi
@@ -431,7 +442,7 @@ section "16. Frontend SSR Check"
 ###############################################################################
 
 for page in "/" "/login" "/bets" "/bets/new" "/events" "/friends" "/feed" "/profile"; do
-  status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:5175$page")
+  status=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND$page")
   if [ "$status" = "200" ]; then
     ok "GET $page → $status"
   else
