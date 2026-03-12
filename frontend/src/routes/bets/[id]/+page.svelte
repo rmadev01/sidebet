@@ -3,7 +3,8 @@
   import { page } from '$app/stores';
   import { coinBalance, isAuthenticated, user } from '$lib/stores';
   import { runWhenAuthResolved } from '$lib/auth';
-  import { getBet, acceptBet, declineBet, cancelBet, settleBet, takeBet, type Bet } from '$lib/api';
+  import { getBet, acceptBet, declineBet, cancelBet, settleBet, takeBet } from '$lib/api';
+  import type { Bet } from '$lib/api';
   import { goto } from '$app/navigation';
   import { ArrowLeft, Trophy, Calendar, Check, X, Ban, Swords } from 'lucide-svelte';
 
@@ -36,6 +37,12 @@
   function isCreator() { return bet?.creator_id === $user?.id; }
   function isOpponent() { return bet?.opponent_id === $user?.id; }
   function canTakeOpenBet() { return !!bet && bet.status === 'open' && !isCreator(); }
+  function resultLabel() {
+    if (!bet?.status) return null;
+    if (bet.status === 'disputed') return 'Disputed - both sides refunded';
+    if (bet.status === 'settled') return bet.outcome || 'Settled';
+    return null;
+  }
 
   async function doAccept() {
     if (!bet) return;
@@ -169,6 +176,10 @@
           </div>
         {/if}
       </div>
+
+      {#if resultLabel()}
+        <p class="text-sm text-text-2 mb-4">{resultLabel()}</p>
+      {/if}
 
       {#if error}
         <p class="text-rose text-sm mb-3">{error}</p>

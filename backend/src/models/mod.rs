@@ -190,26 +190,6 @@ pub struct FeedItem {
     pub created_at: DateTime<Utc>,
 }
 
-// ── Auth (Better Auth session from DB) ──
-
-#[derive(Debug, Clone, Serialize, FromRow)]
-pub struct Session {
-    pub id: String,
-    pub token: String,
-    #[sqlx(rename = "userId")]
-    pub user_id: String,
-    #[sqlx(rename = "expiresAt")]
-    pub expires_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, FromRow)]
-pub struct AuthUser {
-    pub id: String,
-    pub name: String,
-    pub email: String,
-    pub image: Option<String>,
-}
-
 // ── Wallet / Daily Bonus ──
 
 #[derive(Debug, Serialize)]

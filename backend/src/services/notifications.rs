@@ -29,7 +29,7 @@ pub async fn get_unread(
     pool: &PgPool,
     user_id: Uuid,
 ) -> Result<Vec<crate::models::Notification>, sqlx::Error> {
-    sqlx::query_as(
+    sqlx::query_as::<_, crate::models::Notification>(
         r#"
         SELECT * FROM notifications
         WHERE user_id = $1 AND read = false
