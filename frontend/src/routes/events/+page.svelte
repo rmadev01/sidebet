@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { authReady, isAuthenticated } from '$lib/stores';
+  import type { EventSummary } from '$lib/api';
   import { getEvents, syncEvents } from '$lib/api';
   import { RefreshCw, Calendar, Zap } from 'lucide-svelte';
 
-  let events = $state<any[]>([]);
+  let events = $state<EventSummary[]>([]);
   let league = $state('all');
   let loading = $state(true);
   let syncing = $state(false);
+  let error = $state('');
 
   const LEAGUES = [
     { id: 'all', label: 'All' },
@@ -20,21 +22,28 @@
 
   async function loadEvents() {
     loading = true;
+    error = '';
     try {
       const params: Record<string, string> = {};
       if (league !== 'all') params.category = league;
       const all = await getEvents(params);
-      events = all.filter((e: any) => e.status !== 'ended' && e.status !== 'cancelled');
-    } catch { /* fallback to empty */ }
+      events = all.filter((event: EventSummary) => event.status !== 'ended' && event.status !== 'cancelled');
+    } catch (e: any) {
+      events = [];
+      error = e?.message || 'Failed to load events';
+    }
     loading = false;
   }
 
   async function handleSync() {
     syncing = true;
+    error = '';
     try {
       await syncEvents();
       await loadEvents();
-    } catch { /* ignore */ }
+    } catch (e: any) {
+      error = e?.message || 'Failed to sync events';
+    }
     syncing = false;
   }
 
@@ -85,6 +94,8 @@
 
   {#if loading}
     <p class="text-text-3 text-sm py-10 text-center">Loading…</p>
+  {:else if error}
+    <p class="text-rose text-sm py-10 text-center">{error}</p>
   {:else if events.length === 0}
     <p class="text-text-3 text-sm py-10 text-center">No events available. Try syncing to pull the latest from SportsGameOdds.</p>
   {:else}

@@ -1,4 +1,4 @@
-use axum::{extract::Extension, response::IntoResponse, Json};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use chrono::Utc;
 use serde::Serialize;
 use sqlx::PgPool;
@@ -19,10 +19,18 @@ pub async fn health(Extension(pool): Extension<PgPool>) -> impl IntoResponse {
 
     let status = if db_ok { "ok" } else { "degraded" };
     let database = if db_ok { "ok" } else { "error" };
+    let response_status = if db_ok {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
 
-    Json(HealthResponse {
-        status,
-        database,
-        timestamp: Utc::now(),
-    })
+    (
+        response_status,
+        Json(HealthResponse {
+            status,
+            database,
+            timestamp: Utc::now(),
+        }),
+    )
 }

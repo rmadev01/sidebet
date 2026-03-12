@@ -2,11 +2,11 @@
   import { onMount } from 'svelte';
   import { coinBalance, isAuthenticated } from '$lib/stores';
   import { runWhenAuthResolved } from '$lib/auth';
-  import { getOpenBets, takeBet } from '$lib/api';
+  import { getOpenBets, takeBet, type OpenBet } from '$lib/api';
   import { goto } from '$app/navigation';
   import { Plus, Clock, Swords } from 'lucide-svelte';
 
-  let bets = $state<any[]>([]);
+  let bets = $state<OpenBet[]>([]);
   let loading = $state(true);
   let taking = $state<string | null>(null);
   let error = $state('');

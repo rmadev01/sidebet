@@ -89,6 +89,11 @@ export type Bet = {
 	updated_at: string;
 };
 
+export type OpenBet = Bet & {
+	creator_username: string;
+	creator_display_name: string;
+};
+
 export type FeedItem = {
 	id: string;
 	type: string;
@@ -185,7 +190,7 @@ export const settleBet = (id: string, outcome: string) =>
 	apiFetch<Bet>(`/api/bets/${id}/settle`, { method: 'POST', body: JSON.stringify({ outcome }) });
 
 export const getFeed = () => apiFetch<FeedItem[]>('/api/feed');
-export const getOpenBets = () => apiFetch<Bet[]>('/api/feed/open');
+export const getOpenBets = () => apiFetch<OpenBet[]>('/api/feed/open');
 export const takeBet = (id: string) => apiFetch<Bet>(`/api/bets/${id}/take`, { method: 'POST' });
 
 export const getBalance = () => apiFetch<WalletBalance>('/api/wallet/balance');

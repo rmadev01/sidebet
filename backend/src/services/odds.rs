@@ -1,13 +1,22 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
+
+fn http_client() -> Result<Client, OddsError> {
+    Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("sidebet-backend/0.1")
+        .build()
+        .map_err(|error| OddsError::Fetch(error.to_string()))
+}
 
 /// Fetch events from SportsGameOdds API v2
 pub async fn fetch_sportsgameodds_events(
     api_key: &str,
     league_ids: &[&str],
 ) -> Result<Vec<SgoEvent>, OddsError> {
-    let client = Client::new();
+    let client = http_client()?;
     let league_id_param = league_ids.join(",");
     let resp = client
         .get("https://api.sportsgameodds.com/v2/events/")
@@ -39,7 +48,7 @@ pub async fn fetch_sportsgameodds_event(
     api_key: &str,
     event_id: &str,
 ) -> Result<Option<SgoEvent>, OddsError> {
-    let client = Client::new();
+    let client = http_client()?;
     let resp = client
         .get("https://api.sportsgameodds.com/v2/events/")
         .header("X-Api-Key", api_key)
@@ -68,7 +77,7 @@ pub async fn fetch_sportsgameodds_event(
 
 /// Fetch political prediction markets from Polymarket (Gamma API)
 pub async fn fetch_polymarket_events() -> Result<Vec<PolymarketEvent>, OddsError> {
-    let client = Client::new();
+    let client = http_client()?;
     let resp = client
         .get("https://gamma-api.polymarket.com/events")
         .query(&[("tag", "politics"), ("active", "true")])
@@ -90,7 +99,7 @@ pub async fn fetch_polymarket_events() -> Result<Vec<PolymarketEvent>, OddsError
 
 /// Fetch token price from Polymarket CLOB
 pub async fn fetch_polymarket_price(token_id: &str) -> Result<f64, OddsError> {
-    let client = Client::new();
+    let client = http_client()?;
     let url = format!("https://clob.polymarket.com/price?token_id={token_id}");
     let resp = client
         .get(&url)
