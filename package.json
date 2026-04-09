@@ -1,0 +1,11 @@
+{
+  "name": "sidebet",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend -- --host 0.0.0.0",
+    "build:frontend": "npm run build --prefix frontend",
+    "check:frontend": "npm run check --prefix frontend",
+    "check:auth": "npm run check --prefix auth-sidecar",
+    "test:backend": "cargo test --manifest-path backend/Cargo.toml"
+  }
+}

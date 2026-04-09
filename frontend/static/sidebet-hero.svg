@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" fill="none">
+  <defs>
+    <linearGradient id="hero-bg" x1="76" x2="850" y1="54" y2="650" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#163130"/>
+      <stop offset="1" stop-color="#325C57"/>
+    </linearGradient>
+    <linearGradient id="hero-gold" x1="314" x2="646" y1="168" y2="494" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8C36A"/>
+      <stop offset="1" stop-color="#F29C5F"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="720" rx="48" fill="url(#hero-bg)"/>
+  <circle cx="758" cy="156" r="94" fill="#F5EFE2" fill-opacity=".08"/>
+  <circle cx="176" cy="574" r="118" fill="#F5EFE2" fill-opacity=".07"/>
+  <path d="M116 128h284c26.51 0 48 21.49 48 48v122c0 26.51-21.49 48-48 48H116c-26.51 0-48-21.49-48-48V176c0-26.51 21.49-48 48-48Z" fill="#F5EFE2" fill-opacity=".12"/>
+  <path d="M518 180h286c21.539 0 39 17.461 39 39v251c0 21.539-17.461 39-39 39H518c-21.539 0-39-17.461-39-39V219c0-21.539 17.461-39 39-39Z" fill="#F5EFE2"/>
+  <path d="M550 225h221c13.255 0 24 10.745 24 24v33H526v-33c0-13.255 10.745-24 24-24Z" fill="#183331"/>
+  <path d="M525 412h318v20c0 21.539-17.461 39-39 39H564c-21.539 0-39-17.461-39-39v-20Z" fill="#E8EFE2"/>
+  <path d="M582 320c0-48.601 39.399-88 88-88s88 39.399 88 88v12H582v-12Z" fill="url(#hero-gold)"/>
+  <circle cx="621" cy="258" r="17" fill="#F5EFE2"/>
+  <circle cx="670" cy="258" r="17" fill="#F5EFE2"/>
+  <circle cx="719" cy="258" r="17" fill="#F5EFE2"/>
+  <path d="M114 392h267c25.405 0 46 20.595 46 46v144c0 25.405-20.595 46-46 46H114c-25.405 0-46-20.595-46-46V438c0-25.405 20.595-46 46-46Z" fill="#F5EFE2"/>
+  <path d="M114 470h313" stroke="#D7DED3" stroke-width="12" stroke-linecap="round"/>
+  <path d="M165 517h164" stroke="#183331" stroke-width="28" stroke-linecap="round"/>
+  <path d="M165 570h110" stroke="#9FA79B" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="760" cy="588" r="62" fill="#F8C36A"/>
+  <circle cx="760" cy="588" r="46" fill="#163130"/>
+  <path d="M739 588h42" stroke="#F8C36A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M760 567v42" stroke="#F8C36A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M326 92c-7.732 0-14 6.268-14 14v54h28v-54c0-7.732-6.268-14-14-14Z" fill="#F5EFE2"/>
+  <path d="M381 92c-7.732 0-14 6.268-14 14v54h28v-54c0-7.732-6.268-14-14-14Z" fill="#F5EFE2"/>
+</svg>

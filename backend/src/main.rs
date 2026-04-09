@@ -7,19 +7,18 @@ mod ws;
 
 use axum::http::HeaderValue;
 use axum::{
-    BoxError,
     error_handling::HandleErrorLayer,
     extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, patch, post},
-    Extension, Router,
+    BoxError, Extension, Router,
 };
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
-use tower::ServiceBuilder;
 use tower::limit::ConcurrencyLimitLayer;
 use tower::timeout::TimeoutLayer;
+use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::error;
@@ -70,7 +69,11 @@ async fn run() -> Result<(), String> {
     let frontend_origins: Vec<HeaderValue> = cfg
         .allowed_frontend_origins()
         .into_iter()
-        .map(|origin| origin.parse().map_err(|_| format!("invalid frontend origin: {origin}")))
+        .map(|origin| {
+            origin
+                .parse()
+                .map_err(|_| format!("invalid frontend origin: {origin}"))
+        })
         .collect::<Result<_, _>>()?;
     let cors = CorsLayer::new()
         .allow_origin(frontend_origins)
@@ -165,7 +168,9 @@ async fn run() -> Result<(), String> {
                     axum::http::StatusCode::REQUEST_TIMEOUT
                 }))
                 .layer(ConcurrencyLimitLayer::new(1024))
-                .layer(TimeoutLayer::new(Duration::from_secs(cfg.request_timeout_secs))),
+                .layer(TimeoutLayer::new(Duration::from_secs(
+                    cfg.request_timeout_secs,
+                ))),
         )
         .layer(DefaultBodyLimit::max(cfg.max_request_body_bytes))
         .layer(Extension(pool))

@@ -67,11 +67,16 @@
   }
 </script>
 
-<div class="min-h-screen flex flex-col">
-  <header class="sticky top-0 z-50 bg-surface border-b border-border">
-    <div class="max-w-[1200px] mx-auto px-6 h-14 flex items-center justify-between gap-8">
-      <a href="/" class="font-display text-[1.0625rem] font-bold tracking-[0.08em] text-lime no-underline shrink-0 hover:text-lime-hover transition-colors duration-150">
-        SIDEBET
+<div class="min-h-screen flex flex-col relative">
+  <div class="pointer-events-none absolute inset-x-0 top-0 h-[340px] bg-[radial-gradient(circle_at_top,rgba(31,122,104,0.16),transparent_58%)]"></div>
+  <header class="sticky top-0 z-50 border-b border-border bg-[rgba(247,241,228,0.82)] backdrop-blur-xl">
+    <div class="max-w-[1200px] mx-auto px-6 py-3 flex items-center justify-between gap-8 max-sm:px-4">
+      <a href="/" class="flex items-center gap-3 no-underline shrink-0">
+        <img src="/sidebet-mark.svg" alt="SideBet" class="w-10 h-10 rounded-2xl shadow-[0_10px_24px_rgba(20,38,34,0.14)]" />
+        <div class="leading-none">
+          <div class="font-display text-[0.76rem] font-bold tracking-[0.24em] text-lime">SIDEBET</div>
+          <div class="text-[0.72rem] text-text-3 mt-1 max-sm:hidden">Virtual-coin rivalry for sports and live events</div>
+        </div>
       </a>
 
       <nav class="hidden md:flex items-center gap-1">
@@ -96,18 +101,18 @@
             <Coins size={14} strokeWidth={2.5} />
             <span class="leading-none">{formatCoins($coinBalance)}</span>
           </span>
-          <a href="/bets/new" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150 whitespace-nowrap">
+          <a href="/bets/new" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-xl no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150 whitespace-nowrap shadow-[0_10px_24px_rgba(31,122,104,0.18)]">
             <Plus size={14} strokeWidth={2.5} />
             New Bet
           </a>
-          <a href="/profile" aria-label="Open profile" class="w-7 h-7 rounded-full flex items-center justify-center font-display font-bold text-[0.625rem] text-white bg-lime shrink-0 no-underline">
+          <a href="/profile" aria-label="Open profile" class="w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-[0.625rem] text-white bg-lime shrink-0 no-underline shadow-[0_8px_18px_rgba(31,122,104,0.18)]">
             {$user?.name?.[0]?.toUpperCase() || '?'}
           </a>
           <button class="hidden md:inline-flex items-center justify-center px-3 py-1.5 font-display text-xs font-semibold bg-transparent text-text-2 border border-border rounded-md hover:bg-raised hover:text-text-1 active:scale-95 transition-all duration-150 cursor-pointer" onclick={handleSignOut}>
             Sign Out
           </button>
         {:else}
-          <a href="/login" class="inline-flex items-center justify-center px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-md no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150">Sign In</a>
+          <a href="/login" class="inline-flex items-center justify-center px-3 py-1.5 font-display text-xs font-semibold bg-lime text-white rounded-xl no-underline hover:bg-lime-hover active:scale-95 transition-all duration-150 shadow-[0_10px_24px_rgba(31,122,104,0.18)]">Sign In</a>
         {/if}
         <button class="flex md:hidden w-[34px] h-[34px] items-center justify-center bg-transparent border border-border rounded-md text-text-2 cursor-pointer" onclick={() => mobileOpen = !mobileOpen} aria-label="Menu">
           {#if mobileOpen}
@@ -143,7 +148,7 @@
     {/if}
   </header>
 
-  <main class="flex-1 py-9 pb-16 max-md:py-6 max-md:pb-12">
+  <main class="flex-1 py-9 pb-16 max-md:py-6 max-md:pb-12 relative">
     <div class="max-w-[1200px] mx-auto px-6 max-sm:px-4">
       {@render children()}
     </div>
