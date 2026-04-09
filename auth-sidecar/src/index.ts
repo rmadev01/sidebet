@@ -156,7 +156,7 @@ async function main() {
     const authRateLimitWindowSecs = parseIntEnv("AUTH_RATE_LIMIT_WINDOW_SECS", 60);
     const authRateLimitMax = parseIntEnv("AUTH_RATE_LIMIT_MAX", 20);
     const authDbMaxConnections = parseIntEnv("AUTH_DB_MAX_CONNECTIONS", 20);
-    const port = parseIntEnv("AUTH_PORT", 3001);
+    const port = parseIntEnv("AUTH_PORT", parseIntEnv("PORT", 3001));
     const publicBaseUrl = new URL(baseUrl);
     const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
 
