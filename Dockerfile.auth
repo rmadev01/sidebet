@@ -1,7 +1,7 @@
-FROM oven/bun:1.2.16 AS builder
+FROM oven/bun:1.2.16
 WORKDIR /app
 COPY auth-sidecar/package.json auth-sidecar/package-lock.json* auth-sidecar/tsconfig.json ./
-RUN bun install
+RUN bun install --production
 COPY auth-sidecar/src ./src
 EXPOSE 3001
 CMD ["bun", "run", "src/index.ts"]

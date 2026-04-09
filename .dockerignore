@@ -1,0 +1,40 @@
+.git
+.gitignore
+.env
+.env.*
+*.md
+LICENSE
+
+# Rust build artifacts
+backend/target/
+
+# Node / Bun
+node_modules/
+frontend/node_modules/
+auth-sidecar/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
+# Python venv leftovers
+bin/
+include/
+lib/
+lib64
+pyvenv.cfg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Scripts not needed in images
+scripts/
